@@ -1,0 +1,48 @@
+---
+
+- name: Collect local user accounts
+  ansible.builtin.getent:
+    database: passwd
+  changed_when: false
+
+- name: Collect sudo group information
+  ansible.builtin.getent:
+    database: group
+    key: sudo
+  register: sudo_group
+  changed_when: false
+  failed_when: false
+
+- name: Identify accounts with UID 0
+  ansible.builtin.set_fact:
+    root_accounts: >-
+      {{
+        ansible_facts['getent_passwd']
+        | dict2items
+        | selectattr('value.1', 'equalto', '0')
+        | map(attribute='key')
+        | list
+      }}
+
+- name: Evaluate user security
+  ansible.builtin.set_fact:
+    user_security_checks:
+      root_accounts:
+        status: "{{ 'PASS' if root_accounts | length == 1 and root_accounts[0] == 'root' else 'FAIL' }}"
+        description: "Only root should have UID 0"
+
+      ssh_admin_user:
+        status: "{{ 'WARN' if ansible_user == 'root' else 'PASS' }}"
+        description: "Direct root SSH access should be avoided"
+
+      sudo_members:
+        status: "REVIEW"
+        description: "Review accounts with administrative privileges"
+
+- name: Display user security information
+  ansible.builtin.debug:
+    msg:
+      - "Ansible SSH user: {{ ansible_user }}"
+      - "Accounts with UID 0: {{ root_accounts }}"
+      - "User security checks: {{ user_security_checks }}"
+      - "Sudo group: {{ ansible_facts.get('getent_group', {}).get('sudo', 'Not found') }}"

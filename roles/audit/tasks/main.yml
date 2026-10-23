@@ -1,0 +1,29 @@
+---
+
+- name: Audit system
+  ansible.builtin.import_tasks: system.yml
+  tags: system
+
+- name: Audit SSH configuration
+  ansible.builtin.import_tasks: ssh.yml
+  tags: ssh
+
+- name: Audit user accounts
+  ansible.builtin.import_tasks: user.yml
+  tags: user
+
+- name: Audit network configuration
+  ansible.builtin.import_tasks: network.yml
+  tags: network
+
+- name: Audit firewall configuration
+  ansible.builtin.import_tasks: firewall.yml
+  tags: firewall
+
+- name: Audit Update and Upgrade status
+  ansible.builtin.import_tasks: updates.yml
+  tags: updates
+
+- name: Generate security report
+  ansible.builtin.import_tasks: report.yml
+  tags: report

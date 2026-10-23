@@ -1,0 +1,13 @@
+---
+
+- name: Collect listening network sockets
+  ansible.builtin.command:
+    argv:
+      - ss
+      - -tuln
+  register: listening_sockets
+  changed_when: false
+
+- name: Display listening network sockets
+  ansible.builtin.debug:
+    var: listening_sockets.stdout_lines

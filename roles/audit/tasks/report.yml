@@ -1,0 +1,30 @@
+---
+
+- name: Create local reports directory
+  ansible.builtin.file:
+    path: "{{ playbook_dir }}/../reports"
+    state: directory
+    mode: "0700"
+  delegate_to: localhost
+  become: false
+
+- name: Generate JSON security report
+  ansible.builtin.copy:
+    content: "{{ security_report | to_nice_json }}"
+    dest: "{{ playbook_dir }}/../reports/{{ inventory_hostname }}.json"
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+  vars:
+    security_report:
+      tool: AegisOps
+      hostname: "{{ inventory_hostname }}"
+      system:
+        os: "{{ ansible_facts['distribution'] }}"
+        version: "{{ ansible_facts['distribution_version'] }}"
+        kernel: "{{ ansible_facts['kernel'] }}"
+      ssh:
+        root_login: "{{ ssh_security_checks.root_login.status }}"
+        password_auth: "{{ ssh_security_checks.password_auth.status }}"
+        pubkey_auth: "{{ ssh_security_checks.pubkey_auth.status }}"
+        keyboard_interactive: "{{ ssh_security_checks.keyboard_interactive.status }}"

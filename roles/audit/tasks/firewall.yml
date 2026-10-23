@@ -1,0 +1,68 @@
+---
+
+- name: Check if Fail2ban is installed
+  ansible.builtin.command:
+    argv:
+      - dpkg-query
+      - -W
+      - -f=${Status}
+      - fail2ban
+  register: fail2ban_installed
+  changed_when: false
+  failed_when: false
+
+- name: Check Fail2ban service status
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - fail2ban
+  register: fail2ban_status
+  changed_when: false
+  failed_when: false
+  when: fail2ban_installed.rc == 0
+
+- name: Check if UFW is installed
+  ansible.builtin.command:
+    argv:
+      - dpkg-query
+      - -W
+      - -f=${Status}
+      - ufw
+  register: ufw_installed
+  changed_when: false
+  failed_when: false
+
+- name: Check UFW status
+  ansible.builtin.command:
+    argv:
+      - ufw
+      - status
+  register: ufw_status
+  changed_when: false
+  failed_when: false
+  when: ufw_installed.rc == 0
+
+- name: Evaluate firewall security
+  ansible.builtin.set_fact:
+    firewall_security_checks:
+
+      ufw_installed:
+        status: "{{ 'PASS' if ufw_installed.rc == 0 and 'install ok installed' in ufw_installed.stdout else 'WARN' }}"
+        description: "UFW should be installed to manage firewall rules"
+
+      ufw_active:
+        status: "{{ 'PASS' if ufw_status.stdout | default('') | trim == 'Status: active' else 'WARN' }}"
+        description: "UFW should be active and running"
+
+      fail2ban_installed:
+        status: "{{ 'PASS' if fail2ban_installed.rc == 0 and 'install ok installed' in fail2ban_installed.stdout else 'WARN' }}"
+        description: "Fail2ban should be installed to protect against brute-force attacks"
+
+      fail2ban_active:
+        status: "{{ 'PASS' if fail2ban_status.stdout | default('') | trim == 'active' else 'WARN' }}"
+        description: "Fail2ban service should be active and running"
+
+- name: Display firewall security assessment
+  ansible.builtin.debug:
+    var: firewall_security_checks
