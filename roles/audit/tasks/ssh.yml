@@ -1,0 +1,42 @@
+---
+
+- name: Collect SSH configuration
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/sshd
+      - -T
+  register: ssh_config
+  changed_when: false
+
+- name: Display SSH security settings
+  ansible.builtin.debug:
+    msg: >-
+      {{
+        ssh_config.stdout_lines
+        | select('match',
+            '^(port|permitrootlogin|passwordauthentication|pubkeyauthentication|kbdinteractiveauthentication) ')
+        | list
+      }}
+
+- name: Evaluate SSH security settings
+  ansible.builtin.set_fact:
+    ssh_security_checks:
+      root_login:
+        status: "{{ 'PASS' if 'permitrootlogin no' in ssh_config.stdout_lines else 'FAIL' }}"
+        description: "SSH root login must be disabled"
+
+      password_auth:
+        status: "{{ 'PASS' if 'passwordauthentication no' in ssh_config.stdout_lines else 'FAIL' }}"
+        description: "SSH password authentication must be disabled"
+
+      pubkey_auth:
+        status: "{{ 'PASS' if 'pubkeyauthentication yes' in ssh_config.stdout_lines else 'FAIL' }}"
+        description: "SSH public key authentication must be enabled"
+
+      keyboard_interactive:
+        status: "{{ 'PASS' if 'kbdinteractiveauthentication no' in ssh_config.stdout_lines else 'FAIL' }}"
+        description: "Keyboard-interactive authentication must be disabled"
+
+- name: Display SSH security assessment
+  ansible.builtin.debug:
+    var: ssh_security_checks

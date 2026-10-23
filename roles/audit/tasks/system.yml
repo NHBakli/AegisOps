@@ -1,0 +1,15 @@
+---
+- name: Display operating system information
+  ansible.builtin.debug:
+    msg:
+      - "OS: {{ ansible_facts['distribution'] }}"
+      - "Version: {{ ansible_facts['distribution_version'] }}"
+      - "Kernel: {{ ansible_facts['kernel'] }}"
+      - "Architecture: {{ ansible_facts['architecture'] }}"
+
+- name: Display memory information
+  ansible.builtin.debug:
+    msg:
+      - "Total RAM: {{ ansible_facts['memtotal_mb'] }} MB"
+      - "Free RAM: {{ ansible_facts['memfree_mb'] }} MB"
+      - "Used RAM: {{ ansible_facts['memory_mb']['real']['used'] }} MB"

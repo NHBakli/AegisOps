@@ -1,0 +1,37 @@
+---
+
+- name: Check unattended-upgrades package
+  ansible.builtin.command:
+    argv:
+      - dpkg-query
+      - -W
+      - '-f=${Status}'
+      - unattended-upgrades
+  register: unattended_package
+  changed_when: false
+  failed_when: false
+
+- name: Check APT periodic configuration
+  ansible.builtin.command:
+    argv:
+      - apt-config
+      - dump
+  register: apt_configuration
+  changed_when: false
+
+- name: Check APT update timers
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-enabled
+      - apt-daily-upgrade.timer
+  register: apt_upgrade_timer
+  changed_when: false
+  failed_when: false
+
+- name: Display automatic updates audit
+  ansible.builtin.debug:
+    msg:
+      - "Package installed: {{ unattended_package.rc == 0 and 'install ok installed' in unattended_package.stdout }}"
+      - "Upgrade timer: {{ apt_upgrade_timer.stdout | default('unknown', true) }}"
+      - "APT periodic settings: {{ apt_configuration.stdout_lines | select('match', '^APT::Periodic::') | list }}"
