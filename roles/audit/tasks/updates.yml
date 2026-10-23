@@ -19,7 +19,7 @@
   register: apt_configuration
   changed_when: false
 
-- name: Check APT update timers
+- name: Check APT update timer
   ansible.builtin.command:
     argv:
       - systemctl
@@ -29,9 +29,59 @@
   changed_when: false
   failed_when: false
 
+- name: Evaluate automatic updates security
+  ansible.builtin.set_fact:
+    updates_security_checks:
+
+      package_installed:
+        status: >-
+          {{
+            'PASS'
+            if (
+              unattended_package.rc == 0
+              and 'install ok installed' in unattended_package.stdout
+            )
+            else 'WARN'
+          }}
+        description: "Unattended-upgrades should be installed"
+
+      periodic_updates:
+        status: >-
+          {{
+            'PASS'
+            if (
+              apt_configuration.stdout_lines
+              | select(
+                  'match',
+                  '^APT::Periodic::Unattended-Upgrade\s+"1";$'
+                )
+              | list
+              | length
+            ) > 0
+            else 'WARN'
+          }}
+        description: "Automatic security updates should be enabled"
+
+      upgrade_timer:
+        status: >-
+          {{
+            'PASS'
+            if (
+              apt_upgrade_timer.rc == 0
+              and (apt_upgrade_timer.stdout | default('') | trim)
+                  == 'enabled'
+            )
+            else 'WARN'
+          }}
+        description: "APT upgrade timer should be enabled"
+
 - name: Display automatic updates audit
   ansible.builtin.debug:
     msg:
       - "Package installed: {{ unattended_package.rc == 0 and 'install ok installed' in unattended_package.stdout }}"
       - "Upgrade timer: {{ apt_upgrade_timer.stdout | default('unknown', true) }}"
       - "APT periodic settings: {{ apt_configuration.stdout_lines | select('match', '^APT::Periodic::') | list }}"
+
+- name: Display automatic updates assessment
+  ansible.builtin.debug:
+    var: updates_security_checks
