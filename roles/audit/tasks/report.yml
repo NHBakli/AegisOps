@@ -8,6 +8,25 @@
   delegate_to: localhost
   become: false
 
+- name: Calculate security audit summary
+  ansible.builtin.set_fact:
+    audit_summary:
+      total: "{{ all_security_checks | length }}"
+      passed: "{{ all_security_checks | selectattr('status', 'equalto', 'PASS') | list | length }}"
+      failed: "{{ all_security_checks | selectattr('status', 'equalto', 'FAIL') | list | length }}"
+      warnings: "{{ all_security_checks | selectattr('status', 'equalto', 'WARN') | list | length }}"
+      review: "{{ all_security_checks | selectattr('status', 'equalto', 'REVIEW') | list | length }}"
+  vars:
+    all_security_checks: >-
+      {{
+        (
+          ssh_security_checks.values() | list
+          + user_security_checks.values() | list
+          + firewall_security_checks.values() | list
+          + updates_security_checks.values() | list
+        )
+      }}
+
 - name: Generate JSON security report
   ansible.builtin.copy:
     content: "{{ security_report | to_nice_json }}"
@@ -19,12 +38,16 @@
     security_report:
       tool: AegisOps
       hostname: "{{ inventory_hostname }}"
+      summary: "{{ audit_summary }}"
+
       system:
         os: "{{ ansible_facts['distribution'] }}"
         version: "{{ ansible_facts['distribution_version'] }}"
         kernel: "{{ ansible_facts['kernel'] }}"
-      ssh:
-        root_login: "{{ ssh_security_checks.root_login.status }}"
-        password_auth: "{{ ssh_security_checks.password_auth.status }}"
-        pubkey_auth: "{{ ssh_security_checks.pubkey_auth.status }}"
-        keyboard_interactive: "{{ ssh_security_checks.keyboard_interactive.status }}"
+        architecture: "{{ ansible_facts['architecture'] }}"
+
+      checks:
+        ssh: "{{ ssh_security_checks }}"
+        users: "{{ user_security_checks }}"
+        firewall: "{{ firewall_security_checks }}"
+        updates: "{{ updates_security_checks }}"
