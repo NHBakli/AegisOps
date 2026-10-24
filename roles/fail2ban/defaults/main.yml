@@ -1,0 +1,14 @@
+---
+# A ban action is tested only when explicitly requested.
+fail2ban_hardening_approved_host: ""
+fail2ban_hardening_recovery_confirmed: false
+fail2ban_hardening_lxc_compatibility_confirmed: false
+fail2ban_hardening_admin_user: ""
+fail2ban_hardening_probe_private_key: ""
+fail2ban_hardening_admin_source_ip: ""
+fail2ban_hardening_maxretry: 5
+fail2ban_hardening_findtime: 600
+fail2ban_hardening_bantime: 600
+fail2ban_hardening_banaction: iptables-multiport
+fail2ban_hardening_ban_probe_enabled: false
+fail2ban_hardening_probe_ip: 192.0.2.123

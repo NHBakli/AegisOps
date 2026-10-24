@@ -1,0 +1,15 @@
+---
+- name: Validate the real Fail2ban IPv6-listener guard locally
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_port: 22
+  tasks:
+    - name: Supply fixture IPv6 TCP socket table
+      ansible.builtin.set_fact:
+        fail2ban_hardening_tcp6:
+          content: "{{ fixture_tcp6 | b64encode }}"
+
+    - name: Apply the real IPv6-listener guard
+      ansible.builtin.import_tasks: ../../roles/fail2ban/tasks/verify_ipv4_scope.yml

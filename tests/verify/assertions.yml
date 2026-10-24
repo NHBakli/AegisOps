@@ -1,0 +1,108 @@
+---
+- name: Test verification assertions against captured output fixtures
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_port: 22
+    ssh_hardening_disable_root_login: true
+    ssh_hardening_disable_password_auth: true
+    ssh_hardening_disable_keyboard_interactive: true
+    firewall_hardening_default_incoming: deny
+    firewall_hardening_default_outgoing: allow
+    fail2ban_hardening_banaction: iptables-multiport
+    fail2ban_hardening_maxretry: 5
+    fail2ban_hardening_findtime: 600
+    fail2ban_hardening_bantime: 600
+    fail2ban_hardening_admin_source_ip: 127.0.0.2
+    updates_hardening_include_esm: false
+    updates_hardening_automatic_reboot: false
+    users_hardening_admin_username: aegisadmin
+    users_hardening_admin_shell: /bin/bash
+    users_hardening_admin_public_keys:
+      - ssh-ed25519 AAAA test
+    users_hardening_sudo_mode: nopasswd
+  tasks:
+    - name: Build administrator fixture
+      ansible.builtin.set_fact:
+        ansible_facts:
+          getent_passwd:
+            aegisadmin: ['x', '1001', '1001', '', '/home/aegisadmin', '/bin/bash']
+        verify_admin_ssh_directory:
+          stat: {isdir: true, pw_name: aegisadmin, mode: '0700'}
+        verify_admin_authorized_keys_file:
+          stat: {isreg: true, pw_name: aegisadmin, mode: '0600'}
+        verify_admin_authorized_keys:
+          content: "{{ 'ssh-ed25519 AAAA test\n' | b64encode }}"
+        verify_admin_sudoers_file:
+          stat: {isreg: true, pw_name: root, mode: '0440'}
+        verify_admin_sudoers_content:
+          content: "{{ fixture_sudoers | b64encode }}"
+        verify_admin_sudo_list:
+          stdout: '(ALL : ALL) NOPASSWD: ALL'
+      when: fixture_kind == 'users'
+
+    - name: Evaluate administrator fixture
+      ansible.builtin.import_tasks: ../../roles/verify/tasks/users_assert.yml
+      when: fixture_kind == 'users'
+
+    - name: Build SSH fixture
+      ansible.builtin.set_fact:
+        verify_ssh_admin_settings:
+          stdout_lines: "{{ fixture_admin_ssh_lines }}"
+        verify_ssh_root_settings:
+          stdout_lines: "{{ fixture_root_ssh_lines }}"
+      when: fixture_kind == 'ssh'
+
+    - name: Evaluate SSH fixture
+      ansible.builtin.import_tasks: ../../roles/verify/tasks/ssh_assert.yml
+      when: fixture_kind == 'ssh'
+
+    - name: Build UFW fixture
+      ansible.builtin.set_fact:
+        verify_ufw_status:
+          stdout: "{{ fixture_ufw_output }}"
+          stdout_lines: "{{ fixture_ufw_output.splitlines() }}"
+      when: fixture_kind == 'firewall'
+
+    - name: Evaluate UFW fixture
+      ansible.builtin.import_tasks: ../../roles/verify/tasks/firewall_assert.yml
+      when: fixture_kind == 'firewall'
+
+    - name: Build Fail2ban fixture
+      ansible.builtin.set_fact:
+        verify_fail2ban_service:
+          stdout: "{{ fixture_fail2ban_service }}"
+        verify_fail2ban_jail:
+          stdout: "{{ fixture_fail2ban_jail }}"
+        verify_fail2ban_settings:
+          results: "{{ fixture_fail2ban_settings }}"
+      when: fixture_kind == 'fail2ban'
+
+    - name: Evaluate Fail2ban fixture
+      ansible.builtin.import_tasks: ../../roles/verify/tasks/fail2ban_assert.yml
+      when: fixture_kind == 'fail2ban'
+
+    - name: Evaluate effective Fail2ban ignored networks
+      ansible.builtin.import_tasks: ../../roles/verify/tasks/fail2ban_ignoreip.yml
+      when: fixture_kind == 'fail2ban'
+
+    - name: Build APT fixture
+      ansible.builtin.set_fact:
+        verify_updates_package:
+          stdout: install ok installed
+        verify_updates_apt:
+          stdout_lines: "{{ fixture_apt_lines }}"
+        verify_updates_timers_enabled:
+          results:
+            - stdout: enabled
+            - stdout: enabled
+        verify_updates_timers_active:
+          results:
+            - stdout: active
+            - stdout: active
+      when: fixture_kind == 'updates'
+
+    - name: Evaluate APT fixture
+      ansible.builtin.import_tasks: ../../roles/verify/tasks/updates_assert.yml
+      when: fixture_kind == 'updates'

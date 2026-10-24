@@ -1,0 +1,15 @@
+---
+- name: Verify the real administrator SSH source guard locally
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    fail2ban_hardening_admin_source_ip: 198.51.100.7
+  tasks:
+    - name: Supply fixture SSH_CONNECTION output
+      ansible.builtin.set_fact:
+        fail2ban_hardening_ssh_probe:
+          stdout: "{{ fixture_connection }}"
+
+    - name: Apply the real SSH source assertion
+      ansible.builtin.import_tasks: ../../roles/fail2ban/tasks/verify_probe_source.yml

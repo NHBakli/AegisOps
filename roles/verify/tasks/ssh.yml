@@ -1,0 +1,162 @@
+---
+- name: Require the SSH restrictions and connection context to verify
+  ansible.builtin.assert:
+    that:
+      - >-
+        ssh_hardening_disable_root_login | default(false) | bool
+        or ssh_hardening_disable_password_auth | default(false) | bool
+        or ssh_hardening_disable_keyboard_interactive | default(false) | bool
+      - verify_ssh_admin_user is match('^[a-z_][a-z0-9_-]{0,30}$')
+      - verify_ssh_admin_user != 'root'
+      - verify_ssh_source_ip | length > 0
+      - verify_ssh_source_host is match('^[A-Za-z0-9._-]+$')
+      - verify_ssh_probe_private_key is match('^/[^\\s]+$')
+      - ansible_port is defined
+    fail_msg: Set expected SSH restrictions, admin, source context, and local probe key.
+
+- name: Confirm the SSH probe key is a regular local file
+  ansible.builtin.stat:
+    path: "{{ verify_ssh_probe_private_key }}"
+  delegate_to: localhost
+  become: false
+  register: verify_ssh_probe_key
+
+- name: Require the independent SSH probe key to exist
+  ansible.builtin.assert:
+    that:
+      - verify_ssh_probe_key.stat.isreg | default(false)
+    fail_msg: The independent SSH probe key is unavailable on the controller.
+
+- name: Validate the administrator source address
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - 'import ipaddress,sys; ipaddress.ip_address(sys.argv[1])'
+      - "{{ verify_ssh_source_ip }}"
+  changed_when: false
+
+- name: Validate the installed SSH daemon configuration
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/sshd
+      - -t
+      - -f
+      - /etc/ssh/sshd_config
+  changed_when: false
+
+- name: Read installed SSH daemon configuration
+  ansible.builtin.slurp:
+    src: /etc/ssh/sshd_config
+  register: verify_ssh_main_config
+
+- name: Inspect standard SSH include directory
+  ansible.builtin.stat:
+    path: /etc/ssh/sshd_config.d
+  register: verify_ssh_include_directory
+
+- name: Search included SSH files for conditional or nested directives
+  ansible.builtin.command:
+    argv:
+      - grep
+      - -RinE
+      - '^[[:space:]]*(Match|Include)[[:space:]]'
+      - /etc/ssh/sshd_config.d
+  register: verify_ssh_nested_directives
+  changed_when: false
+  failed_when: false
+  when: verify_ssh_include_directory.stat.isdir | default(false)
+
+- name: Require an inspectable SSH policy without Match clauses
+  ansible.builtin.assert:
+    that:
+      - >-
+        not (verify_ssh_include_directory.stat.exists | default(false))
+        or (
+          verify_ssh_include_directory.stat.isdir | default(false)
+          and not (verify_ssh_include_directory.stat.islnk | default(false))
+        )
+      - >-
+        (verify_ssh_main_config.content | b64decode).splitlines()
+        | select('match', '(?i)^\\s*Match\\s+') | list | length == 0
+      - >-
+        (verify_ssh_main_config.content | b64decode).splitlines()
+        | select('match', '(?i)^\\s*Include\\s+')
+        | reject('match', '(?i)^\\s*Include\\s+/etc/ssh/sshd_config\\.d/\\*\\.conf\\s*(#.*)?$')
+        | list | length == 0
+      - >-
+        not (verify_ssh_include_directory.stat.isdir | default(false))
+        or verify_ssh_nested_directives.rc == 1
+    fail_msg: Match or nonstandard Include directives require separate SSH review.
+
+- name: Read SSH settings for the administrator connection context
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/sshd
+      - -T
+      - -C
+      - "user={{ verify_ssh_admin_user }},host={{ verify_ssh_source_host }},addr={{ verify_ssh_source_ip }},lport={{ ansible_port }}"
+  register: verify_ssh_admin_settings
+  changed_when: false
+
+- name: Read SSH settings for root in the same source context
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/sshd
+      - -T
+      - -C
+      - "user=root,host={{ verify_ssh_source_host }},addr={{ verify_ssh_source_ip }},lport={{ ansible_port }}"
+  register: verify_ssh_root_settings
+  changed_when: false
+
+- name: Require the requested effective SSH settings
+  ansible.builtin.import_tasks: ssh_assert.yml
+
+- name: Read the running SSH service state
+  ansible.builtin.command:
+    argv: [systemctl, is-active, ssh]
+  register: verify_ssh_service
+  changed_when: false
+
+- name: Require the SSH service to be active
+  ansible.builtin.assert:
+    that:
+      - verify_ssh_service.stdout | trim == 'active'
+    fail_msg: The SSH service is not active.
+
+- name: Probe a fresh administrator SSH and sudo session from the controller
+  ansible.builtin.command:
+    argv:
+      - ssh
+      - -F
+      - /dev/null
+      - -o
+      - BatchMode=yes
+      - -o
+      - ControlMaster=no
+      - -o
+      - ControlPath=none
+      - -o
+      - StrictHostKeyChecking=yes
+      - -o
+      - IdentitiesOnly=yes
+      - -o
+      - PreferredAuthentications=publickey
+      - -o
+      - PasswordAuthentication=no
+      - -o
+      - KbdInteractiveAuthentication=no
+      - -o
+      - ConnectTimeout=10
+      - -i
+      - "{{ verify_ssh_probe_private_key }}"
+      - -p
+      - "{{ ansible_port | string }}"
+      - "{{ verify_ssh_admin_user }}@{{ ansible_host | default(inventory_hostname) }}"
+      - sudo
+      - -n
+      - /usr/bin/true
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  no_log: true

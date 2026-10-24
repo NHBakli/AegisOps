@@ -1,0 +1,12 @@
+---
+- name: Validate firewall input without touching UFW
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - ../../roles/firewall_hardening/defaults/main.yml
+  vars:
+    ansible_port: 22
+  tasks:
+    - name: Run the real firewall rule validation tasks
+      ansible.builtin.import_tasks: ../../roles/firewall_hardening/tasks/validate_rules.yml

@@ -1,0 +1,47 @@
+---
+- name: Validate declared inbound rule list
+  ansible.builtin.assert:
+    that:
+      - firewall_hardening_allowed_inbound is sequence
+      - firewall_hardening_allowed_inbound is not string
+      - firewall_hardening_default_incoming in ['deny', 'reject']
+      - firewall_hardening_default_outgoing == 'allow'
+      - ansible_port is defined
+      - (ansible_port | default('') | string) is match('^[0-9]+$')
+      - (ansible_port | default(0) | int) >= 1
+      - (ansible_port | default(0) | int) <= 65535
+    fail_msg: >-
+      Use an explicit SSH port, an inbound deny/reject policy, outbound allow,
+      and a list of deliberate inbound allow rules.
+
+- name: Validate each inbound allow rule
+  ansible.builtin.assert:
+    that:
+      - item is mapping
+      - item.port is defined
+      - item.proto is defined
+      - item.keys() | difference(['port', 'proto']) | length == 0
+      - item.port is integer
+      - item.port >= 1
+      - item.port <= 65535
+      - item.proto in ['tcp', 'udp']
+    fail_msg: >-
+      Each inbound rule must contain only an integer port (1-65535) and
+      protocol tcp or udp.
+  loop: "{{ firewall_hardening_allowed_inbound }}"
+
+- name: Reject duplicate rules and a duplicate SSH allowance
+  ansible.builtin.assert:
+    that:
+      - >-
+        firewall_hardening_allowed_inbound[:firewall_hardening_rule_index]
+        | selectattr('port', 'equalto', item.port)
+        | selectattr('proto', 'equalto', item.proto)
+        | list | length == 0
+      - not (item.port == (ansible_port | int) and item.proto == 'tcp')
+    fail_msg: >-
+      Duplicate allow rules or an extra rule for the SSH TCP port are not
+      accepted. SSH is managed separately before other rules.
+  loop: "{{ firewall_hardening_allowed_inbound }}"
+  loop_control:
+    index_var: firewall_hardening_rule_index

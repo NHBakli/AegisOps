@@ -1,0 +1,16 @@
+---
+- name: Require expected policies and a visible SSH allowance
+  ansible.builtin.assert:
+    that:
+      - >-
+        (firewall_hardening_active_details.stdout_lines | first | default('') | trim) == 'Status: active'
+      - >-
+        ('Default: ' ~ firewall_hardening_default_incoming ~ ' (incoming), allow (outgoing)')
+        in firewall_hardening_active_details.stdout
+      - >-
+        firewall_hardening_active_details.stdout_lines
+        | select('match', '^' ~ (ansible_port | string) ~ '/tcp\\s+ALLOW IN\\s+')
+        | list | length > 0
+    fail_msg: >-
+      Active UFW has different policies or no visible SSH allow rule. It was
+      not changed; review all existing rules before a manual correction.

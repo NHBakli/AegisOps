@@ -1,0 +1,9 @@
+---
+- name: Require CAP_NET_ADMIN for UFW activation
+  ansible.builtin.assert:
+    that:
+      - >-
+        (((firewall_hardening_process_status.content | b64decode
+          | regex_findall('(?m)^CapEff:\\s*([0-9A-Fa-f]+)$') | first | int(base=16))
+          // 4096) % 2) == 1
+    fail_msg: CAP_NET_ADMIN is unavailable; UFW activation is unsafe.

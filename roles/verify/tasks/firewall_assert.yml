@@ -1,0 +1,34 @@
+---
+- name: Normalize visible inbound openings for comparison
+  ansible.builtin.set_fact:
+    verify_ufw_open_ports: >-
+      {{
+        verify_ufw_status.stdout_lines
+        | select('search', 'ALLOW IN')
+        | map('split') | map('first')
+        | unique | list
+      }}
+    verify_ufw_expected_ports: >-
+      {{
+        ([(ansible_port | string) ~ '/tcp']
+         + (firewall_hardening_allowed_inbound | default([])
+            | map(attribute='port') | map('string') | list
+            | zip(firewall_hardening_allowed_inbound | default([]) | map(attribute='proto') | list)
+            | map('join', '/') | list))
+        | unique | list
+      }}
+
+- name: Assert UFW is active with the expected default and SSH allowance
+  ansible.builtin.assert:
+    that:
+      - (verify_ufw_status.stdout_lines | first | default('') | trim) == 'Status: active'
+      - >-
+        ('Default: ' ~ (firewall_hardening_default_incoming | default('deny'))
+         ~ ' (incoming), allow (outgoing)') in verify_ufw_status.stdout
+      - >-
+        verify_ufw_status.stdout_lines
+        | select('match', '^' ~ (ansible_port | string) ~ '/tcp\\s+ALLOW IN\\s+')
+        | list | length > 0
+      - verify_ufw_open_ports | sort == verify_ufw_expected_ports | sort
+      - verify_ufw_status.stdout_lines | select('search', 'LIMIT IN') | list | length == 0
+    fail_msg: UFW is inactive or its visible policy does not permit the expected SSH port.

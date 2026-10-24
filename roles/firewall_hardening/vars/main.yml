@@ -1,0 +1,32 @@
+---
+# Direct SSH connection without Ansible's ControlMaster session.
+firewall_hardening_probe_argv:
+  - ssh
+  - -F
+  - /dev/null
+  - -o
+  - BatchMode=yes
+  - -o
+  - ControlMaster=no
+  - -o
+  - ControlPath=none
+  - -o
+  - StrictHostKeyChecking=yes
+  - -o
+  - IdentitiesOnly=yes
+  - -o
+  - PreferredAuthentications=publickey
+  - -o
+  - PasswordAuthentication=no
+  - -o
+  - KbdInteractiveAuthentication=no
+  - -o
+  - ConnectTimeout=10
+  - -i
+  - "{{ firewall_hardening_probe_private_key }}"
+  - -p
+  - "{{ ansible_port | string }}"
+  - "{{ firewall_hardening_admin_user }}@{{ ansible_host | default(inventory_hostname) }}"
+  - sudo
+  - -n
+  - /usr/bin/true

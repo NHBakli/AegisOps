@@ -1,0 +1,27 @@
+---
+name: Quality
+
+'on':
+  push:
+  pull_request:
+
+jobs:
+  ansible:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install local quality tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ansible-core ansible-lint
+      - name: Install pinned Ansible collections
+        run: ansible-galaxy collection install -r requirements.yml --force
+      - name: Check playbook syntax
+        run: |
+          ansible-playbook -i inventories/example/hosts.yml playbooks/audit.yml --syntax-check
+          ansible-playbook -i inventories/example/hosts.yml playbooks/hardening.yml --syntax-check
+          ansible-playbook -i inventories/example/hosts.yml playbooks/verify.yml --syntax-check
+      - name: Lint repository
+        run: ansible-lint --offline
+      - name: Run local tests
+        run: python3 -m unittest discover -s tests -p 'test_*.py'

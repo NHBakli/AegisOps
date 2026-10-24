@@ -1,0 +1,150 @@
+---
+- name: Gather minimal facts for SSH platform checks
+  ansible.builtin.setup:
+    gather_subset:
+      - min
+
+- name: Require a reviewed SSH change and a working non-root Ansible session
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution'] == 'Ubuntu'
+      - ansible_facts['distribution_version'] == '22.04'
+      - ssh_hardening_include_directory_path == '/etc/ssh/sshd_config.d'
+      - not ansible_check_mode
+      - ssh_hardening_disable_root_login | bool or ssh_hardening_disable_password_auth | bool or ssh_hardening_disable_keyboard_interactive | bool
+      - ssh_hardening_approved_host == inventory_hostname
+      - ssh_hardening_recovery_confirmed | bool
+      - ssh_hardening_independent_login_confirmed | bool
+      - ssh_hardening_admin_user is match('^[a-z_][a-z0-9_-]{0,30}$')
+      - ssh_hardening_admin_user != 'root'
+      - ansible_user is defined
+      - ansible_user == ssh_hardening_admin_user
+      - ssh_hardening_probe_private_key is match('^/[^\s]+$')
+    fail_msg: >-
+      SSH changes require Ubuntu 22.04, an explicit host approval, confirmed
+      console recovery, a separately tested non-root administrator session,
+      and the administrator's private key path on the controller.
+      Check mode cannot verify a candidate SSH configuration and is unsupported
+      for this role.
+
+- name: Confirm the private key exists on the controller
+  ansible.builtin.stat:
+    path: "{{ ssh_hardening_probe_private_key }}"
+  delegate_to: localhost
+  become: false
+  register: ssh_hardening_probe_key_stat
+
+- name: Require a regular private key file on the controller
+  ansible.builtin.assert:
+    that:
+      - ssh_hardening_probe_key_stat.stat.isreg | default(false)
+    fail_msg: The private key for the independent SSH probe is unavailable.
+
+- name: Confirm the SSH daemon configuration is valid before changes
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/sshd
+      - -t
+      - -f
+      - /etc/ssh/sshd_config
+  changed_when: false
+
+- name: Read the existing SSH daemon configuration
+  ansible.builtin.slurp:
+    src: /etc/ssh/sshd_config
+  register: ssh_hardening_original_config
+
+- name: Check whether existing SSH configuration can be safely restricted
+  ansible.builtin.import_tasks: config_safety.yml
+
+- name: Probe a fresh administrator SSH connection before changing access
+  ansible.builtin.command:
+    argv: "{{ ssh_hardening_probe_argv }}"
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  no_log: true
+
+- name: Apply SSH restrictions with automatic rollback on verification failure
+  block:
+    - name: Place validated SSH restrictions before existing directives
+      ansible.builtin.blockinfile:
+        path: /etc/ssh/sshd_config
+        marker: "# {mark} AEGISOPS SSH HARDENING"
+        insertbefore: BOF
+        block: |
+          {% if ssh_hardening_disable_root_login | bool %}
+          PermitRootLogin no
+          {% endif %}
+          {% if ssh_hardening_disable_password_auth | bool %}
+          PasswordAuthentication no
+          {% endif %}
+          {% if ssh_hardening_disable_keyboard_interactive | bool %}
+          KbdInteractiveAuthentication no
+          {% endif %}
+          PubkeyAuthentication yes
+        backup: true
+        validate: /usr/sbin/sshd -t -f %s
+      register: ssh_hardening_configuration
+      notify: Reload validated SSH configuration
+
+    - name: Read effective global SSH settings from the updated file
+      ansible.builtin.command:
+        argv:
+          - /usr/sbin/sshd
+          - -T
+          - -f
+          - /etc/ssh/sshd_config
+      register: ssh_hardening_effective_config
+      changed_when: false
+
+    - name: Require the requested SSH settings to be effective globally
+      ansible.builtin.assert:
+        that:
+          - not (ssh_hardening_disable_root_login | bool) or 'permitrootlogin no' in ssh_hardening_effective_config.stdout_lines
+          - not (ssh_hardening_disable_password_auth | bool) or 'passwordauthentication no' in ssh_hardening_effective_config.stdout_lines
+          - not (ssh_hardening_disable_keyboard_interactive | bool) or 'kbdinteractiveauthentication no' in ssh_hardening_effective_config.stdout_lines
+          - "'pubkeyauthentication yes' in ssh_hardening_effective_config.stdout_lines"
+        fail_msg: Requested SSH settings are not effective in the global daemon configuration.
+
+    - name: Apply the validated SSH configuration
+      ansible.builtin.meta: flush_handlers
+
+    - name: Probe a fresh administrator SSH connection after reload
+      ansible.builtin.command:
+        argv: "{{ ssh_hardening_probe_argv }}"
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      no_log: true
+
+    - name: Show the SSH configuration backup path for recovery
+      ansible.builtin.debug:
+        msg: "Previous SSH configuration: {{ ssh_hardening_configuration.backup_file }}"
+      when: ssh_hardening_configuration.backup_file is defined
+
+  rescue:
+    - name: Restore the previous SSH daemon configuration
+      ansible.builtin.copy:
+        src: "{{ ssh_hardening_configuration.backup_file }}"
+        dest: /etc/ssh/sshd_config
+        remote_src: true
+        owner: root
+        group: root
+        mode: preserve
+        validate: /usr/sbin/sshd -t -f %s
+      when: ssh_hardening_configuration.backup_file is defined
+
+    - name: Reload SSH after restoring the previous configuration
+      ansible.builtin.service:
+        name: ssh
+        state: reloaded
+      when: ssh_hardening_configuration.backup_file is defined
+
+    - name: Stop after SSH verification failed
+      ansible.builtin.fail:
+        msg: >-
+          SSH validation or the independent administrator probe failed.
+          A saved configuration was restored when available; verify console
+          access and the active daemon configuration before retrying.
+          Backup: {{ ssh_hardening_configuration.backup_file | default('none') }}.

@@ -1,0 +1,51 @@
+---
+- name: Require explicit approval and a tested administrator connection before UFW activation
+  ansible.builtin.assert:
+    that:
+      - firewall_hardening_approved_host == inventory_hostname
+      - firewall_hardening_recovery_confirmed | bool
+      - firewall_hardening_independent_login_confirmed | bool
+      - firewall_hardening_admin_user is match('^[a-z_][a-z0-9_-]{0,30}$')
+      - firewall_hardening_admin_user != 'root'
+      - ansible_user is defined
+      - ansible_user == firewall_hardening_admin_user
+      - firewall_hardening_probe_private_key is match('^/[^\s]+$')
+      - ansible_facts['virtualization_type'] is defined
+      - (ansible_facts['virtualization_type'] | default('')) | length > 0
+      - >-
+        (ansible_facts['virtualization_type'] | default('') | lower)
+        not in ['lxc', 'container', 'openvz', 'docker', 'podman']
+        or firewall_hardening_lxc_compatibility_confirmed | bool
+    fail_msg: >-
+      UFW activation requires this host's approval, console/snapshot recovery,
+      a tested non-root SSH administrator, and explicit LXC compatibility
+      confirmation where applicable.
+
+- name: Confirm the probe key exists on the controller
+  ansible.builtin.stat:
+    path: "{{ firewall_hardening_probe_private_key }}"
+  delegate_to: localhost
+  become: false
+  register: firewall_hardening_probe_key_stat
+
+- name: Require a regular probe key file
+  ansible.builtin.assert:
+    that:
+      - firewall_hardening_probe_key_stat.stat.isreg | default(false)
+    fail_msg: The independent SSH probe key is unavailable on the controller.
+
+- name: Read effective Linux capabilities before UFW activation
+  ansible.builtin.slurp:
+    src: /proc/self/status
+  register: firewall_hardening_process_status
+
+- name: Require CAP_NET_ADMIN before UFW activation
+  ansible.builtin.import_tasks: capability_check.yml
+
+- name: Probe a fresh administrator SSH connection before changing active firewall behavior
+  ansible.builtin.command:
+    argv: "{{ firewall_hardening_probe_argv }}"
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  no_log: true

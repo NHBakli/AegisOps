@@ -1,0 +1,19 @@
+---
+- name: Validate the administrator and test IPv4 addresses
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - |
+        import ipaddress
+        import sys
+
+        admin = ipaddress.ip_address(sys.argv[1])
+        probe = ipaddress.ip_address(sys.argv[2])
+        if admin.version != 4 or probe != ipaddress.ip_address('192.0.2.123'):
+            sys.exit('Fail2ban IPv4 probe cannot verify IPv6 SSH protection')
+        if admin == probe or admin.is_loopback or str(admin) != sys.argv[1]:
+            sys.exit('invalid administrator or test IPv4 address')
+      - "{{ fail2ban_hardening_admin_source_ip }}"
+      - "{{ fail2ban_hardening_probe_ip }}"
+  changed_when: false

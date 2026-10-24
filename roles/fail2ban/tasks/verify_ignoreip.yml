@@ -1,0 +1,27 @@
+---
+- name: Check the effective ignored networks and reserved test address
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - |
+        import ipaddress
+        import sys
+
+        source = ipaddress.ip_address(sys.argv[1])
+        probe = ipaddress.ip_address(sys.argv[2])
+        networks = []
+        for raw in sys.argv[3].replace(',', ' ').split():
+            token = raw.strip('|`-[]\'"')
+            try:
+                networks.append(ipaddress.ip_network(token, strict=False))
+            except ValueError:
+                pass
+        if not any(source in network for network in networks):
+            sys.exit('administrator source is absent from effective ignoreip')
+        if any(probe in network for network in networks):
+            sys.exit('reserved probe address is covered by effective ignoreip')
+      - "{{ fail2ban_hardening_admin_source_ip }}"
+      - "{{ fail2ban_hardening_probe_ip }}"
+      - "{{ fail2ban_hardening_ignoreip.stdout }}"
+  changed_when: false

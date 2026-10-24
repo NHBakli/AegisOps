@@ -1,0 +1,54 @@
+---
+- name: Reject an AegisOps block that is not at the top of the configuration
+  ansible.builtin.assert:
+    that:
+      - >-
+        '# BEGIN AEGISOPS SSH HARDENING' not in (ssh_hardening_original_config.content | b64decode)
+        or (ssh_hardening_original_config.content | b64decode).startswith('# BEGIN AEGISOPS SSH HARDENING')
+    fail_msg: Move the existing AegisOps block to the top after manual review.
+
+- name: Check whether the standard SSH include directory exists
+  ansible.builtin.stat:
+    path: "{{ ssh_hardening_include_directory_path }}"
+  register: ssh_hardening_include_directory
+
+- name: Require a regular SSH include directory when present
+  ansible.builtin.assert:
+    that:
+      - >-
+        not (ssh_hardening_include_directory.stat.exists | default(false))
+        or (
+          (ssh_hardening_include_directory.stat.isdir | default(false))
+          and not (ssh_hardening_include_directory.stat.islnk | default(false))
+        )
+    fail_msg: Review a non-directory or symlinked SSH include path before changing access.
+
+- name: Search included SSH configuration for conditional or nested directives
+  ansible.builtin.command:
+    argv:
+      - grep
+      - -RinE
+      - '^[[:space:]]*(Match|Include)[[:space:]]'
+      - "{{ ssh_hardening_include_directory_path }}"
+  register: ssh_hardening_nested_directives
+  changed_when: false
+  failed_when: false
+  when: ssh_hardening_include_directory.stat.isdir | default(false)
+
+- name: Require a fully inspectable SSH configuration without Match clauses
+  ansible.builtin.assert:
+    that:
+      - >-
+        (ssh_hardening_original_config.content | b64decode).splitlines()
+        | select('match', '(?i)^\\s*Match\\s+') | list | length == 0
+      - >-
+        (ssh_hardening_original_config.content | b64decode).splitlines()
+        | select('match', '(?i)^\\s*Include\\s+')
+        | reject('match', '(?i)^\\s*Include\\s+/etc/ssh/sshd_config\\.d/\\*\\.conf\\s*(#.*)?$')
+        | list | length == 0
+      - >-
+        not (ssh_hardening_include_directory.stat.isdir | default(false))
+        or ssh_hardening_nested_directives.rc == 1
+    fail_msg: >-
+      Existing Match clauses or nonstandard Include directives need a separate
+      SSH policy review before applying access restrictions.

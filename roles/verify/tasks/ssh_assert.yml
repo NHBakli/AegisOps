@@ -1,0 +1,22 @@
+---
+- name: Assert administrator and root SSH contexts match the requested restrictions
+  ansible.builtin.assert:
+    that:
+      - "'pubkeyauthentication yes' in verify_ssh_admin_settings.stdout_lines"
+      - "'port ' ~ (ansible_port | string) in verify_ssh_admin_settings.stdout_lines"
+      - >-
+        not (ssh_hardening_disable_root_login | default(false) | bool)
+        or 'permitrootlogin no' in verify_ssh_root_settings.stdout_lines
+      - >-
+        not (ssh_hardening_disable_password_auth | default(false) | bool)
+        or (
+          'passwordauthentication no' in verify_ssh_admin_settings.stdout_lines
+          and 'passwordauthentication no' in verify_ssh_root_settings.stdout_lines
+        )
+      - >-
+        not (ssh_hardening_disable_keyboard_interactive | default(false) | bool)
+        or (
+          'kbdinteractiveauthentication no' in verify_ssh_admin_settings.stdout_lines
+          and 'kbdinteractiveauthentication no' in verify_ssh_root_settings.stdout_lines
+        )
+    fail_msg: Effective sshd settings do not match the requested restrictions.

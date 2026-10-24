@@ -1,0 +1,15 @@
+---
+- name: Test IPv6 SSH listener scope without touching network state
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_port: 22
+  tasks:
+    - name: Build IPv6 socket fixture
+      ansible.builtin.set_fact:
+        fail2ban_hardening_tcp6:
+          content: "{{ fixture_tcp6 | b64encode }}"
+
+    - name: Run the same IPv4 scope check used by verification
+      ansible.builtin.import_tasks: ../../roles/fail2ban/tasks/verify_ipv4_scope.yml

@@ -1,0 +1,3 @@
+---
+- name: Prepare UFW rules and policies
+  ansible.builtin.import_tasks: prepare.yml

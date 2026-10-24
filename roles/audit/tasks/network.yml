@@ -1,5 +1,4 @@
 ---
-
 - name: Collect listening network sockets
   ansible.builtin.command:
     argv:

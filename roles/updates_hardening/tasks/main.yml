@@ -1,0 +1,3 @@
+---
+- name: Configure automatic security updates
+  ansible.builtin.import_tasks: configure.yml

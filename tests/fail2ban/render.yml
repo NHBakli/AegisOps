@@ -1,0 +1,18 @@
+---
+- name: Render the SSH jail for local assertions
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_port: 2222
+    fail2ban_hardening_maxretry: 4
+    fail2ban_hardening_findtime: 900
+    fail2ban_hardening_bantime: 3600
+    fail2ban_hardening_admin_source_ip: 198.51.100.7
+    fail2ban_hardening_banaction: iptables-multiport
+  tasks:
+    - name: Render a temporary Fail2ban SSH jail
+      ansible.builtin.template:
+        src: ../../roles/fail2ban/templates/90-aegisops-sshd.local.j2
+        dest: "{{ fixture_dest }}"
+        mode: '0600'

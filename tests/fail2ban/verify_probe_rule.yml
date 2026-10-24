@@ -1,0 +1,13 @@
+---
+- name: Verify the real Fail2ban iptables rule guard locally
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Supply fixture iptables-save output
+      ansible.builtin.set_fact:
+        fail2ban_hardening_probe_rules:
+          stdout: "{{ fixture_iptables }}"
+
+    - name: Apply the real iptables rule guard
+      ansible.builtin.import_tasks: ../../roles/fail2ban/tasks/verify_probe_rule.yml

@@ -1,0 +1,25 @@
+---
+- name: Verify persisted UFW rule guard without touching UFW
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Build fixture UFW state and manifest
+      ansible.builtin.set_fact:
+        firewall_hardening_existing_added_rules:
+          stdout: "{{ fixture_added_rules }}"
+          stdout_lines: "{{ fixture_added_rules.splitlines() }}"
+        firewall_hardening_rule_manifest_stat:
+          stat:
+            exists: "{{ fixture_manifest_exists }}"
+        firewall_hardening_intent_manifest_stat:
+          stat:
+            exists: "{{ fixture_intent_exists }}"
+        firewall_hardening_rule_manifest:
+          content: "{{ fixture_manifest | b64encode }}"
+        firewall_hardening_intent_manifest:
+          content: "{{ fixture_previous_intent | to_json | b64encode }}"
+        firewall_hardening_requested_intent: "{{ fixture_requested_intent }}"
+
+    - name: Run the real persisted rule assertion
+      ansible.builtin.import_tasks: ../../roles/firewall_hardening/tasks/manifest_safety.yml

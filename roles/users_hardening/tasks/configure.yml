@@ -1,0 +1,165 @@
+---
+- name: Validate administrator configuration before changing the host
+  ansible.builtin.assert:
+    that:
+      - users_hardening_admin_username is string
+      - users_hardening_admin_username is match('^[a-z_][a-z0-9_-]{0,30}$')
+      - users_hardening_admin_username != 'root'
+      - users_hardening_admin_shell is string
+      - users_hardening_admin_shell is match('^/[^\s]+$')
+      - users_hardening_admin_groups is sequence
+      - users_hardening_admin_groups is not string
+      - users_hardening_admin_public_keys is sequence
+      - users_hardening_admin_public_keys is not string
+      - users_hardening_admin_public_keys | length > 0
+      - users_hardening_sudo_mode in ['password', 'nopasswd']
+      - users_hardening_admin_password_hash == '' or users_hardening_admin_password_hash is match('^\\$[0-9A-Za-z]+\\$')
+    fail_msg: >-
+      Set a non-root administrator, at least one public key, and an explicit
+      sudo mode before running the users role. An optional password must be
+      supplied as an encrypted crypt hash.
+
+- name: Validate public key values
+  ansible.builtin.assert:
+    that:
+      - item is string
+      - item is match('^(ssh-(ed25519|rsa)|ecdsa-sha2-[^ ]+|sk-ssh-ed25519@openssh.com|sk-ecdsa-sha2-nistp256@openssh.com) [A-Za-z0-9+/=]+( .*)?$')
+      - "'\n' not in item"
+    fail_msg: Administrator keys must be literal SSH public keys.
+  loop: "{{ users_hardening_admin_public_keys }}"
+  loop_control:
+    label: "public key {{ ansible_loop.index if ansible_loop is defined else 'entry' }}"
+  no_log: true
+
+- name: Check whether the administrator account already exists
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ users_hardening_admin_username }}"
+  register: users_hardening_existing_account
+  failed_when: false
+
+- name: Require non-interactive sudo and SSH key for the full hardening run
+  ansible.builtin.assert:
+    that:
+      - users_hardening_sudo_mode == 'nopasswd'
+      - ssh_hardening_probe_private_key is defined
+      - ssh_hardening_probe_private_key is string
+      - ssh_hardening_probe_private_key is match('^/[^\\s]+$')
+    fail_msg: >-
+      A full hardening run needs nopasswd sudo and the local SSH private key
+      path used by the independent connection checks.
+  when: "'users' not in ansible_run_tags or (ansible_run_tags | difference(['users']) | length > 0)"
+
+- name: Require an existing account for password based sudo
+  ansible.builtin.assert:
+    that:
+      - users_hardening_existing_account is succeeded
+      - users_hardening_existing_account.ansible_facts.getent_passwd is defined
+    fail_msg: >-
+      Password based sudo requires an existing administrator account with a
+      working password. Bootstrap a new account with nopasswd sudo, or prepare
+      the account separately.
+  when: users_hardening_sudo_mode == 'password'
+
+- name: Verify requested supplementary groups exist
+  ansible.builtin.getent:
+    database: group
+    key: "{{ item }}"
+  loop: "{{ users_hardening_admin_groups }}"
+
+- name: Check required local tools
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /usr/sbin/visudo
+    - /usr/bin/sudo
+    - /usr/bin/su
+    - /usr/bin/true
+    - "{{ users_hardening_admin_shell }}"
+  register: users_hardening_required_tools
+
+- name: Require sudo and administrator shell before changing the host
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isreg
+    fail_msg: "Required file is missing or invalid: {{ item.item }}"
+  loop: "{{ users_hardening_required_tools.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Verify the administrator private key exists on the controller
+  ansible.builtin.stat:
+    path: "{{ ssh_hardening_probe_private_key }}"
+  delegate_to: localhost
+  become: false
+  register: users_hardening_private_key
+  when: "'users' not in ansible_run_tags or (ansible_run_tags | difference(['users']) | length > 0)"
+
+- name: Require a private key file for the administrator connection
+  ansible.builtin.assert:
+    that:
+      - users_hardening_private_key.stat.exists
+      - users_hardening_private_key.stat.isreg
+    fail_msg: "The SSH private key must exist on the Ansible controller."
+  no_log: true
+  when: "'users' not in ansible_run_tags or (ansible_run_tags | difference(['users']) | length > 0)"
+
+- name: Create or update administrator account
+  ansible.builtin.user:
+    name: "{{ users_hardening_admin_username }}"
+    shell: "{{ users_hardening_admin_shell }}"
+    groups: "{{ users_hardening_admin_groups }}"
+    append: true
+    create_home: true
+    password: "{{ users_hardening_admin_password_hash if users_hardening_admin_password_hash | length > 0 else omit }}"
+    update_password: on_create
+    password_lock: "{{ true if users_hardening_admin_password_hash | length == 0 else omit }}"
+    state: present
+  no_log: true
+
+- name: Install administrator public keys without removing existing keys
+  ansible.posix.authorized_key:
+    user: "{{ users_hardening_admin_username }}"
+    key: "{{ users_hardening_admin_public_keys | join('\n') }}"
+    state: present
+    exclusive: false
+    manage_dir: true
+  no_log: true
+
+- name: Configure explicit administrator sudo policy
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/90-aegisops-{{ users_hardening_admin_username }}"
+    content: |
+      # Managed by AegisOps
+      {{ users_hardening_admin_username }} ALL=(ALL:ALL) {{ 'NOPASSWD:' if users_hardening_sudo_mode == 'nopasswd' else '' }}ALL
+    owner: root
+    group: root
+    mode: "0440"
+    validate: /usr/sbin/visudo -cf %s
+
+- name: Verify account is present
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ users_hardening_admin_username }}"
+
+- name: Verify sudo recognizes administrator policy
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/sudo
+      - -l
+      - -U
+      - "{{ users_hardening_admin_username }}"
+  changed_when: false
+
+- name: Verify passwordless sudo works when selected
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/su
+      - -s
+      - /bin/sh
+      - -c
+      - /usr/bin/sudo -n /usr/bin/true
+      - "{{ users_hardening_admin_username }}"
+  changed_when: false
+  when: users_hardening_sudo_mode == 'nopasswd'

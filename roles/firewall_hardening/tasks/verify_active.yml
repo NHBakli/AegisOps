@@ -1,0 +1,59 @@
+---
+- name: Read rules recorded in the already active UFW
+  ansible.builtin.command:
+    argv:
+      - ufw
+      - show
+      - added
+  register: firewall_hardening_existing_added_rules
+  changed_when: false
+  environment:
+    LC_ALL: C
+
+- name: Find the AegisOps rule manifest for active UFW
+  ansible.builtin.stat:
+    path: /var/lib/aegisops/ufw-added-rules.txt
+  register: firewall_hardening_rule_manifest_stat
+
+- name: Find the AegisOps intent manifest for active UFW
+  ansible.builtin.stat:
+    path: /var/lib/aegisops/ufw-intent.json
+  register: firewall_hardening_intent_manifest_stat
+
+- name: Refuse an already active UFW that AegisOps did not prepare
+  ansible.builtin.import_tasks: active_manifest_requirement.yml
+
+- name: Read the active UFW rule manifest
+  ansible.builtin.slurp:
+    src: /var/lib/aegisops/ufw-added-rules.txt
+  register: firewall_hardening_rule_manifest
+
+- name: Read the active UFW intent manifest
+  ansible.builtin.slurp:
+    src: /var/lib/aegisops/ufw-intent.json
+  register: firewall_hardening_intent_manifest
+
+- name: Require active UFW rules to match the AegisOps preparation
+  ansible.builtin.import_tasks: manifest_safety.yml
+
+- name: Read active UFW policy and rules without changing them
+  ansible.builtin.command:
+    argv:
+      - ufw
+      - status
+      - verbose
+  register: firewall_hardening_active_details
+  changed_when: false
+  environment:
+    LC_ALL: C
+
+- name: Require expected UFW state before trusting the active firewall
+  ansible.builtin.import_tasks: verify_active_state.yml
+
+- name: Confirm the existing active UFW still permits administrator SSH
+  ansible.builtin.command:
+    argv: "{{ firewall_hardening_probe_argv }}"
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  no_log: true

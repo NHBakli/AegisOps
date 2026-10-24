@@ -1,0 +1,30 @@
+---
+# A fresh SSH connection, independent of the Ansible control connection.
+fail2ban_hardening_ssh_probe_argv:
+  - ssh
+  - -F
+  - /dev/null
+  - -o
+  - BatchMode=yes
+  - -o
+  - ControlMaster=no
+  - -o
+  - ControlPath=none
+  - -o
+  - StrictHostKeyChecking=yes
+  - -o
+  - IdentitiesOnly=yes
+  - -o
+  - PreferredAuthentications=publickey
+  - -o
+  - PasswordAuthentication=no
+  - -o
+  - KbdInteractiveAuthentication=no
+  - -o
+  - ConnectTimeout=10
+  - -i
+  - "{{ fail2ban_hardening_probe_private_key }}"
+  - -p
+  - "{{ ansible_port | string }}"
+  - "{{ fail2ban_hardening_admin_user }}@{{ ansible_host | default(inventory_hostname) }}"
+  - "printf '%s\\n' \"$SSH_CONNECTION\"; sudo -n /usr/bin/true"

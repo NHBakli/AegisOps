@@ -1,0 +1,172 @@
+---
+- name: Gather platform facts for Fail2ban safeguards
+  ansible.builtin.setup:
+    gather_subset:
+      - min
+      - virtual
+
+- name: Validate Fail2ban inputs and network capability before changes
+  ansible.builtin.import_tasks: preflight.yml
+
+- name: Refuse concurrent local SSH jail definitions before installation
+  ansible.builtin.import_tasks: preflight_jails.yml
+
+- name: Confirm the independent administrator probe key exists on the controller
+  ansible.builtin.stat:
+    path: "{{ fail2ban_hardening_probe_private_key }}"
+  delegate_to: localhost
+  become: false
+  register: fail2ban_hardening_probe_key_stat
+
+- name: Require a regular administrator probe key
+  ansible.builtin.assert:
+    that:
+      - fail2ban_hardening_probe_key_stat.stat.isreg | default(false)
+    fail_msg: The independent administrator SSH key is unavailable on the controller.
+
+- name: Verify the administrator SSH source before changing Fail2ban
+  ansible.builtin.import_tasks: probe_ssh.yml
+
+- name: Check the SSH service supplying journal events
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - ssh
+  register: fail2ban_hardening_ssh_service
+  changed_when: false
+
+- name: Check the SSH journal is accessible
+  ansible.builtin.command:
+    argv:
+      - journalctl
+      - -u
+      - ssh
+      - -n
+      - '1'
+      - --no-pager
+      - --quiet
+  register: fail2ban_hardening_ssh_journal
+  changed_when: false
+
+- name: Require at least one SSH journal event before configuring Fail2ban
+  ansible.builtin.assert:
+    that:
+      - fail2ban_hardening_ssh_journal.stdout | trim | length > 0
+    fail_msg: The SSH systemd journal has no readable events for the SSH jail.
+
+- name: Check whether Fail2ban was active before this run
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - fail2ban
+  register: fail2ban_hardening_initial_service
+  changed_when: false
+  failed_when: false
+
+- name: Install Fail2ban and the systemd journal backend without auto-starting it
+  ansible.builtin.apt:
+    name:
+      - fail2ban
+      - python3-systemd
+      - iptables
+    state: present
+    update_cache: false
+    policy_rc_d: 101
+
+- name: Ensure the Fail2ban override directory exists
+  ansible.builtin.file:
+    path: /etc/fail2ban/jail.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Inspect the existing AegisOps SSH jail override
+  ansible.builtin.stat:
+    path: /etc/fail2ban/jail.d/90-aegisops-sshd.local
+  register: fail2ban_hardening_previous_jail
+
+- name: Configure and verify the SSH jail with rollback on failure
+  block:
+    - name: Write the AegisOps SSH jail without replacing other jail files
+      ansible.builtin.template:
+        src: 90-aegisops-sshd.local.j2
+        dest: /etc/fail2ban/jail.d/90-aegisops-sshd.local
+        owner: root
+        group: root
+        mode: '0644'
+        backup: true
+      register: fail2ban_hardening_jail_write
+      notify: Reload Fail2ban configuration
+
+    - name: Validate the complete Fail2ban configuration
+      ansible.builtin.command:
+        argv:
+          - fail2ban-client
+          - -t
+      changed_when: false
+
+    - name: Start Fail2ban with the validated configuration
+      ansible.builtin.service:
+        name: fail2ban
+        state: started
+
+    - name: Apply the validated SSH jail configuration
+      ansible.builtin.meta: flush_handlers
+
+    - name: Verify the SSH jail and its effective settings
+      ansible.builtin.import_tasks: verify.yml
+
+    - name: Recheck independent administrator SSH access after the jail reload
+      ansible.builtin.import_tasks: probe_ssh.yml
+
+    - name: Exercise the ban action only when explicitly requested
+      ansible.builtin.import_tasks: probe.yml
+      when: fail2ban_hardening_ban_probe_enabled | bool
+
+    - name: Enable the verified Fail2ban service at boot
+      ansible.builtin.service:
+        name: fail2ban
+        enabled: true
+
+  rescue:
+    - name: Restore the previous AegisOps SSH jail file
+      ansible.builtin.copy:
+        src: "{{ fail2ban_hardening_jail_write.backup_file }}"
+        dest: /etc/fail2ban/jail.d/90-aegisops-sshd.local
+        remote_src: true
+        owner: root
+        group: root
+        mode: preserve
+      when: fail2ban_hardening_jail_write.backup_file is defined
+
+    - name: Remove a new AegisOps SSH jail after failed validation
+      ansible.builtin.file:
+        path: /etc/fail2ban/jail.d/90-aegisops-sshd.local
+        state: absent
+      when:
+        - not (fail2ban_hardening_previous_jail.stat.exists | default(false))
+        - fail2ban_hardening_jail_write is defined
+
+    - name: Reload the previous Fail2ban configuration when it was active
+      ansible.builtin.command:
+        argv:
+          - fail2ban-client
+          - reload
+      changed_when: true
+      when: fail2ban_hardening_initial_service.rc == 0
+
+    - name: Stop a Fail2ban service started during a failed run
+      ansible.builtin.service:
+        name: fail2ban
+        state: stopped
+      when: fail2ban_hardening_initial_service.rc != 0
+
+    - name: Report Fail2ban verification failure after rollback
+      ansible.builtin.fail:
+        msg: >-
+          Fail2ban configuration or verification failed. The previous jail
+          file and service state were restored when possible; inspect the
+          service and console before retrying.

@@ -1,0 +1,13 @@
+---
+- name: Verify capability parsing without touching UFW
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Build fixture Linux process status
+      ansible.builtin.set_fact:
+        firewall_hardening_process_status:
+          content: "{{ fixture_process_status | b64encode }}"
+
+    - name: Run the real CAP_NET_ADMIN assertion
+      ansible.builtin.import_tasks: ../../roles/firewall_hardening/tasks/capability_check.yml

@@ -1,0 +1,9 @@
+---
+- name: Require both AegisOps preparation manifests for active UFW
+  ansible.builtin.assert:
+    that:
+      - firewall_hardening_rule_manifest_stat.stat.exists | default(false)
+      - firewall_hardening_intent_manifest_stat.stat.exists | default(false)
+    fail_msg: >-
+      Active UFW has no AegisOps preparation manifests. Its existing rules
+      cannot be treated as this role's declared firewall policy.

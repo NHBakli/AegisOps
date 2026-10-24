@@ -1,0 +1,13 @@
+---
+# Enabling UFW requires separate, host-specific approval.
+firewall_hardening_activate: false
+firewall_hardening_allowed_inbound: []
+firewall_hardening_default_incoming: deny
+firewall_hardening_default_outgoing: allow
+
+firewall_hardening_approved_host: ""
+firewall_hardening_recovery_confirmed: false
+firewall_hardening_independent_login_confirmed: false
+firewall_hardening_lxc_compatibility_confirmed: false
+firewall_hardening_admin_user: ""
+firewall_hardening_probe_private_key: ""

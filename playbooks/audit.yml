@@ -1,5 +1,4 @@
 ---
-
 - name: AegisOps | Initial VPS Audit
   hosts: vps
   become: true

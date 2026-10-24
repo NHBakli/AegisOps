@@ -1,0 +1,7 @@
+---
+- name: Reload Fail2ban configuration
+  ansible.builtin.command:
+    argv:
+      - fail2ban-client
+      - reload
+  changed_when: true

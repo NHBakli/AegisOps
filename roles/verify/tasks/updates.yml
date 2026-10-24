@@ -1,0 +1,44 @@
+---
+- name: Require an explicit automatic update reboot policy
+  ansible.builtin.assert:
+    that:
+      - updates_hardening_automatic_reboot | default(false) is boolean
+      - updates_hardening_include_esm | default(false) is boolean
+    fail_msg: Supply boolean update reboot and ESM expectations.
+
+- name: Read unattended-upgrades package state
+  ansible.builtin.command:
+    argv:
+      - dpkg-query
+      - -W
+      - -f=${Status}
+      - unattended-upgrades
+  register: verify_updates_package
+  changed_when: false
+
+- name: Read effective APT configuration
+  ansible.builtin.command:
+    argv: [apt-config, dump]
+  register: verify_updates_apt
+  changed_when: false
+
+- name: Read APT timer enablement
+  ansible.builtin.command:
+    argv: [systemctl, is-enabled, "{{ item }}"]
+  loop:
+    - apt-daily.timer
+    - apt-daily-upgrade.timer
+  register: verify_updates_timers_enabled
+  changed_when: false
+
+- name: Read APT timer activity
+  ansible.builtin.command:
+    argv: [systemctl, is-active, "{{ item }}"]
+  loop:
+    - apt-daily.timer
+    - apt-daily-upgrade.timer
+  register: verify_updates_timers_active
+  changed_when: false
+
+- name: Require the effective security update policy and active timers
+  ansible.builtin.import_tasks: updates_assert.yml

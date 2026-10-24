@@ -1,0 +1,18 @@
+---
+- name: Validate effective APT policy from a fixture
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Read isolated effective APT configuration
+      ansible.builtin.command:
+        argv:
+          - apt-config
+          - dump
+      register: updates_hardening_apt_config
+      changed_when: false
+      environment:
+        APT_CONFIG: "{{ fixture_apt_config }}"
+
+    - name: Run the real effective policy assertions
+      ansible.builtin.import_tasks: ../../roles/updates_hardening/tasks/verify_policy.yml

@@ -1,0 +1,80 @@
+---
+- name: Require an explicit administrator identity and public keys to verify
+  ansible.builtin.assert:
+    that:
+      - users_hardening_admin_username is defined
+      - users_hardening_admin_username | default('') is match('^[a-z_][a-z0-9_-]{0,30}$')
+      - users_hardening_admin_username != 'root'
+      - users_hardening_admin_public_keys is defined
+      - users_hardening_admin_public_keys | default([]) | length > 0
+      - users_hardening_sudo_mode | default('') in ['password', 'nopasswd']
+    fail_msg: Supply the administrator, expected public keys, and sudo mode to verify.
+
+- name: Read the administrator account from the target
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ users_hardening_admin_username }}"
+  changed_when: false
+
+- name: Record the administrator home directory from the target account
+  ansible.builtin.set_fact:
+    verify_admin_home: "{{ ansible_facts['getent_passwd'][users_hardening_admin_username][4] }}"
+
+- name: Inspect the administrator SSH directory
+  ansible.builtin.stat:
+    path: "{{ verify_admin_home }}/.ssh"
+  register: verify_admin_ssh_directory
+
+- name: Inspect the administrator authorized keys file
+  ansible.builtin.stat:
+    path: "{{ verify_admin_home }}/.ssh/authorized_keys"
+  register: verify_admin_authorized_keys_file
+
+- name: Read actual administrator authorized keys
+  ansible.builtin.slurp:
+    src: "{{ verify_admin_home }}/.ssh/authorized_keys"
+  register: verify_admin_authorized_keys
+  no_log: true
+
+- name: Inspect the managed administrator sudo policy
+  ansible.builtin.stat:
+    path: "/etc/sudoers.d/90-aegisops-{{ users_hardening_admin_username }}"
+  register: verify_admin_sudoers_file
+
+- name: Read the managed administrator sudo policy
+  ansible.builtin.slurp:
+    src: "/etc/sudoers.d/90-aegisops-{{ users_hardening_admin_username }}"
+  register: verify_admin_sudoers_content
+
+- name: Validate the managed sudo policy syntax
+  ansible.builtin.command:
+    argv:
+      - /usr/sbin/visudo
+      - -cf
+      - "/etc/sudoers.d/90-aegisops-{{ users_hardening_admin_username }}"
+  changed_when: false
+
+- name: Ask sudo for the administrator's effective privileges
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/sudo
+      - -l
+      - -U
+      - "{{ users_hardening_admin_username }}"
+  register: verify_admin_sudo_list
+  changed_when: false
+
+- name: Require the account, keys, permissions, and sudo policy to be present
+  ansible.builtin.import_tasks: users_assert.yml
+
+- name: Check passwordless sudo as the administrator when expected
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/su
+      - -s
+      - /bin/sh
+      - -c
+      - /usr/bin/sudo -n /usr/bin/true
+      - "{{ users_hardening_admin_username }}"
+  changed_when: false
+  when: users_hardening_sudo_mode == 'nopasswd'

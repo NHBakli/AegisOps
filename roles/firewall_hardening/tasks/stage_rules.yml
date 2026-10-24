@@ -1,0 +1,145 @@
+---
+- name: Ensure UFW is installed for preparation
+  ansible.builtin.apt:
+    name: ufw
+    state: present
+    update_cache: false
+
+- name: Read UFW state after package installation
+  ansible.builtin.command:
+    argv:
+      - ufw
+      - status
+  register: firewall_hardening_prepared_status
+  changed_when: false
+  environment:
+    LC_ALL: C
+
+- name: Require UFW to remain inactive before adding rules
+  ansible.builtin.assert:
+    that:
+      - >-
+        (firewall_hardening_prepared_status.stdout_lines | first | default('') | trim) == 'Status: inactive'
+    fail_msg: UFW became active unexpectedly; no rules were changed.
+
+- name: Read rules already staged in inactive UFW
+  ansible.builtin.command:
+    argv:
+      - ufw
+      - show
+      - added
+  register: firewall_hardening_existing_added_rules
+  changed_when: false
+  environment:
+    LC_ALL: C
+
+- name: Check whether AegisOps previously staged these UFW rules
+  ansible.builtin.stat:
+    path: /var/lib/aegisops/ufw-added-rules.txt
+  register: firewall_hardening_rule_manifest_stat
+
+- name: Check whether AegisOps previously recorded the requested policy
+  ansible.builtin.stat:
+    path: /var/lib/aegisops/ufw-intent.json
+  register: firewall_hardening_intent_manifest_stat
+
+- name: Read the previous AegisOps UFW rule manifest
+  ansible.builtin.slurp:
+    src: /var/lib/aegisops/ufw-added-rules.txt
+  register: firewall_hardening_rule_manifest
+  when: firewall_hardening_rule_manifest_stat.stat.exists | default(false)
+
+- name: Read the previous AegisOps firewall intent
+  ansible.builtin.slurp:
+    src: /var/lib/aegisops/ufw-intent.json
+  register: firewall_hardening_intent_manifest
+  when: firewall_hardening_intent_manifest_stat.stat.exists | default(false)
+
+- name: Require inactive UFW rules to match the previous AegisOps staging
+  ansible.builtin.import_tasks: manifest_safety.yml
+
+- name: Allow the current Ansible SSH port before setting any default deny policy
+  community.general.ufw:
+    rule: allow
+    direction: in
+    proto: tcp
+    port: "{{ ansible_port | string }}"
+    comment: AegisOps SSH access
+
+- name: Add explicitly declared inbound allow rules
+  community.general.ufw:
+    rule: allow
+    direction: in
+    proto: "{{ item.proto }}"
+    port: "{{ item.port | string }}"
+    comment: AegisOps declared access
+  loop: "{{ firewall_hardening_allowed_inbound }}"
+
+- name: Set inbound default policy after allow rules
+  community.general.ufw:
+    direction: incoming
+    default: "{{ firewall_hardening_default_incoming }}"
+
+- name: Set outbound default policy
+  community.general.ufw:
+    direction: outgoing
+    default: "{{ firewall_hardening_default_outgoing }}"
+
+- name: Read UFW rules after staging
+  ansible.builtin.command:
+    argv:
+      - ufw
+      - show
+      - added
+  register: firewall_hardening_staged_rules
+  changed_when: false
+  environment:
+    LC_ALL: C
+
+- name: Create protected AegisOps state directory
+  ansible.builtin.file:
+    path: /var/lib/aegisops
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Save the exact staged UFW rule list for safe re-execution
+  ansible.builtin.copy:
+    dest: /var/lib/aegisops/ufw-added-rules.txt
+    content: "{{ firewall_hardening_staged_rules.stdout | trim }}\n"
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Save the exact requested firewall policy for safe re-execution
+  ansible.builtin.copy:
+    dest: /var/lib/aegisops/ufw-intent.json
+    content: "{{ firewall_hardening_requested_intent | to_nice_json }}\n"
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Activate and verify UFW with a targeted rollback if the probe fails
+  when: firewall_hardening_activate | bool
+  block:
+    - name: Activate UFW after SSH allowance and policies are staged
+      community.general.ufw:
+        state: enabled
+      register: firewall_hardening_activation_result
+
+    - name: Verify active UFW state and administrator access
+      ansible.builtin.import_tasks: verify_active.yml
+
+  rescue:
+    - name: Disable only the UFW instance activated by this run
+      community.general.ufw:
+        state: disabled
+      when: firewall_hardening_activation_result is defined
+
+    - name: Stop after UFW activation or the independent probe failed
+      ansible.builtin.fail:
+        msg: >-
+          UFW activation or the post-activation SSH probe failed. UFW was
+          disabled when the host stayed reachable. Check the provider console
+          before retrying; staged rules were preserved.

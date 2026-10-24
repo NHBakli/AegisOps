@@ -1,0 +1,7 @@
+---
+- name: Verify missing Fail2ban prerequisites stop before mutation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  roles:
+    - role: fail2ban

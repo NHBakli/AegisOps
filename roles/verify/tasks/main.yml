@@ -1,0 +1,38 @@
+---
+- name: Require at least one explicitly selected verification section
+  ansible.builtin.assert:
+    that:
+      - ansible_run_tags == ['all']
+      - ansible_skip_tags | length == 0
+      - >-
+        verify_users | bool or verify_ssh | bool or verify_firewall | bool
+        or verify_fail2ban | bool or verify_updates | bool
+    fail_msg: Select at least one verify_* section and run without --tags or --skip-tags.
+  tags: always
+
+- name: Require the Ubuntu version validated for AegisOps verification
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution'] == 'Ubuntu'
+      - ansible_facts['distribution_version'] == '22.04'
+    fail_msg: Verification currently supports only Ubuntu 22.04.
+
+- name: Verify administrator account and credentials
+  ansible.builtin.import_tasks: users.yml
+  when: verify_users | bool
+
+- name: Verify effective SSH daemon policy
+  ansible.builtin.import_tasks: ssh.yml
+  when: verify_ssh | bool
+
+- name: Verify active UFW policy
+  ansible.builtin.import_tasks: firewall.yml
+  when: verify_firewall | bool
+
+- name: Verify active Fail2ban SSH jail
+  ansible.builtin.import_tasks: fail2ban.yml
+  when: verify_fail2ban | bool
+
+- name: Verify automatic security updates
+  ansible.builtin.import_tasks: updates.yml
+  when: verify_updates | bool
