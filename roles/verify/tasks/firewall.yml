@@ -1,0 +1,35 @@
+---
+- name: Require an explicit SSH port and expected UFW policy
+  ansible.builtin.assert:
+    that:
+      - ansible_port is defined
+      - ansible_port | int >= 1
+      - ansible_port | int <= 65535
+      - firewall_hardening_default_incoming | default('deny') in ['deny', 'reject']
+      - firewall_hardening_default_outgoing | default('allow') == 'allow'
+      - firewall_hardening_allowed_inbound | default([]) is sequence
+    fail_msg: Provide the expected SSH port and UFW policy to verify.
+
+- name: Read active UFW policy and visible rules
+  ansible.builtin.command:
+    argv:
+      - ufw
+      - status
+      - verbose
+  register: verify_ufw_status
+  changed_when: false
+  environment:
+    LC_ALL: C
+
+- name: Require active UFW, expected defaults, and SSH access
+  ansible.builtin.import_tasks: firewall_assert.yml
+
+- name: Require every declared inbound rule to be visible
+  ansible.builtin.assert:
+    that:
+      - >-
+        verify_ufw_status.stdout_lines
+        | select('match', '^' ~ (item.port | string) ~ '/' ~ item.proto ~ '\\s+ALLOW IN\\s+')
+        | list | length > 0
+    fail_msg: "Expected UFW allow rule is not visible: {{ item.port }}/{{ item.proto }}"
+  loop: "{{ firewall_hardening_allowed_inbound | default([]) }}"

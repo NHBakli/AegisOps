@@ -1,0 +1,34 @@
+---
+- name: Extract pre-existing unattended-upgrades origin entries
+  ansible.builtin.set_fact:
+    updates_hardening_existing_origins: >-
+      {{
+        updates_hardening_existing_apt_config.stdout_lines
+        | select('match', '^Unattended-Upgrade::Allowed-Origins:: ')
+        | list
+      }}
+    updates_hardening_existing_patterns: >-
+      {{
+        updates_hardening_existing_apt_config.stdout_lines
+        | select('match', '^Unattended-Upgrade::Origins-Pattern:: ')
+        | list
+      }}
+
+- name: Require explicit review before replacing custom update origins
+  ansible.builtin.assert:
+    that:
+      - >-
+        updates_hardening_replace_existing_origins_confirmed | bool
+        or (
+          updates_hardening_existing_origins | difference([
+            'Unattended-Upgrade::Allowed-Origins:: "${distro_id}:${distro_codename}";',
+            'Unattended-Upgrade::Allowed-Origins:: "${distro_id}:${distro_codename}-security";',
+            'Unattended-Upgrade::Allowed-Origins:: "${distro_id}ESMApps:${distro_codename}-apps-security";',
+            'Unattended-Upgrade::Allowed-Origins:: "${distro_id}ESM:${distro_codename}-infra-security";'
+          ]) | length == 0
+          and updates_hardening_existing_patterns | length == 0
+        )
+    fail_msg: >-
+      Existing custom unattended-upgrades origins would be replaced. Review
+      the effective APT policy and opt in to replacing those origins before
+      enabling this role.

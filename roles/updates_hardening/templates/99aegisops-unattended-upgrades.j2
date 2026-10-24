@@ -1,0 +1,15 @@
+// Managed by AegisOps: Ubuntu security pockets only.
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+#clear Unattended-Upgrade::Allowed-Origins;
+#clear Unattended-Upgrade::Origins-Pattern;
+Unattended-Upgrade::Allowed-Origins {
+  "${distro_id}:${distro_codename}-security";
+{% if updates_hardening_include_esm %}
+  "${distro_id}ESMApps:${distro_codename}-apps-security";
+  "${distro_id}ESM:${distro_codename}-infra-security";
+{% endif %}
+};
+Unattended-Upgrade::Automatic-Reboot "{{ 'true' if updates_hardening_automatic_reboot else 'false' }}";
+Unattended-Upgrade::Automatic-Reboot-WithUsers "false";
+Unattended-Upgrade::Automatic-Reboot-Time "{{ updates_hardening_reboot_time }}";

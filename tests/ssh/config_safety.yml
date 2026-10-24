@@ -1,0 +1,13 @@
+---
+- name: Exercise the SSH configuration safety tasks locally
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Read fixture SSH configuration
+      ansible.builtin.slurp:
+        src: "{{ fixture_config_path }}"
+      register: ssh_hardening_original_config
+
+    - name: Apply the real SSH configuration safety checks
+      ansible.builtin.import_tasks: ../../roles/ssh_hardening/tasks/config_safety.yml

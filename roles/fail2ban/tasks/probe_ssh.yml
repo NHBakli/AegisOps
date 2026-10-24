@@ -1,0 +1,12 @@
+---
+- name: Probe a fresh administrator SSH session and noninteractive sudo
+  ansible.builtin.command:
+    argv: "{{ fail2ban_hardening_ssh_probe_argv }}"
+  delegate_to: localhost
+  become: false
+  register: fail2ban_hardening_ssh_probe
+  changed_when: false
+  no_log: true
+
+- name: Require the SSH source seen by the server to match the ignored address
+  ansible.builtin.import_tasks: verify_probe_source.yml

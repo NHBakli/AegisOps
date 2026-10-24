@@ -1,11 +1,10 @@
 ---
-
 - name: Check unattended-upgrades package
   ansible.builtin.command:
     argv:
       - dpkg-query
       - -W
-      - '-f=${Status}'
+      - -f=${Status}
       - unattended-upgrades
   register: unattended_package
   changed_when: false
@@ -18,6 +17,7 @@
       - dump
   register: apt_configuration
   changed_when: false
+  failed_when: false
 
 - name: Check APT update timer
   ansible.builtin.command:
@@ -32,7 +32,6 @@
 - name: Evaluate automatic updates security
   ansible.builtin.set_fact:
     updates_security_checks:
-
       package_installed:
         status: >-
           {{
@@ -43,12 +42,13 @@
             )
             else 'WARN'
           }}
-        description: "Unattended-upgrades should be installed"
+        description: Unattended-upgrades should be installed
 
       periodic_updates:
         status: >-
           {{
-            'PASS'
+            'REVIEW' if apt_configuration.rc != 0
+            else 'PASS'
             if (
               apt_configuration.stdout_lines
               | select(
@@ -60,7 +60,7 @@
             ) > 0
             else 'WARN'
           }}
-        description: "Automatic security updates should be enabled"
+        description: Automatic security updates should be enabled
 
       upgrade_timer:
         status: >-
@@ -73,7 +73,7 @@
             )
             else 'WARN'
           }}
-        description: "APT upgrade timer should be enabled"
+        description: APT upgrade timer should be enabled
 
 - name: Display automatic updates audit
   ansible.builtin.debug:

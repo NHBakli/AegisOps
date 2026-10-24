@@ -1,5 +1,4 @@
 ---
-
 - name: Collect local user accounts
   ansible.builtin.getent:
     database: passwd
@@ -29,15 +28,15 @@
     user_security_checks:
       root_accounts:
         status: "{{ 'PASS' if root_accounts | length == 1 and root_accounts[0] == 'root' else 'FAIL' }}"
-        description: "Only root should have UID 0"
+        description: Only root should have UID 0
 
       ssh_admin_user:
         status: "{{ 'WARN' if ansible_user == 'root' else 'PASS' }}"
-        description: "Direct root SSH access should be avoided"
+        description: Direct root SSH access should be avoided
 
       sudo_members:
-        status: "REVIEW"
-        description: "Review accounts with administrative privileges"
+        status: REVIEW
+        description: Review accounts with administrative privileges
 
 - name: Display user security information
   ansible.builtin.debug:

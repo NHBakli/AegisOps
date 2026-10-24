@@ -1,0 +1,26 @@
+---
+- name: Assert administrator account, keys, permissions, and sudo policy
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['getent_passwd'][users_hardening_admin_username][1] | int > 0
+      - ansible_facts['getent_passwd'][users_hardening_admin_username][5] == users_hardening_admin_shell | default('/bin/bash')
+      - verify_admin_ssh_directory.stat.isdir | default(false)
+      - verify_admin_ssh_directory.stat.pw_name | default('') == users_hardening_admin_username
+      - verify_admin_ssh_directory.stat.mode | default('') == '0700'
+      - verify_admin_authorized_keys_file.stat.isreg | default(false)
+      - verify_admin_authorized_keys_file.stat.pw_name | default('') == users_hardening_admin_username
+      - verify_admin_authorized_keys_file.stat.mode | default('') == '0600'
+      - verify_admin_sudoers_file.stat.isreg | default(false)
+      - verify_admin_sudoers_file.stat.pw_name | default('') == 'root'
+      - verify_admin_sudoers_file.stat.mode | default('') == '0440'
+      - >-
+        (users_hardening_admin_username ~ ' ALL=(ALL:ALL) '
+         ~ ('NOPASSWD:' if users_hardening_sudo_mode == 'nopasswd' else '')
+         ~ 'ALL') in (verify_admin_sudoers_content.content | b64decode).splitlines()
+      - "'ALL' in verify_admin_sudo_list.stdout"
+      - >-
+        users_hardening_admin_public_keys
+        | difference((verify_admin_authorized_keys.content | b64decode).splitlines())
+        | length == 0
+    fail_msg: Administrator account, SSH keys, file permissions, or sudo policy differ from expectations.
+  no_log: true

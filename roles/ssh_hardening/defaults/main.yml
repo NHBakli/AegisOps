@@ -1,0 +1,12 @@
+---
+# Reference policy, applied only after the access safeguards in configure.yml.
+ssh_hardening_disable_root_login: true
+ssh_hardening_disable_password_auth: true
+ssh_hardening_disable_keyboard_interactive: true
+
+# Required approvals and the independently tested administrator connection.
+ssh_hardening_approved_host: ""
+ssh_hardening_recovery_confirmed: false
+ssh_hardening_independent_login_confirmed: false
+ssh_hardening_admin_user: ""
+ssh_hardening_probe_private_key: ""

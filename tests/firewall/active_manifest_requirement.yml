@@ -1,0 +1,17 @@
+---
+- name: Verify active UFW ownership guard without touching UFW
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Build fixture manifest presence
+      ansible.builtin.set_fact:
+        firewall_hardening_rule_manifest_stat:
+          stat:
+            exists: "{{ fixture_rule_manifest_exists }}"
+        firewall_hardening_intent_manifest_stat:
+          stat:
+            exists: "{{ fixture_intent_manifest_exists }}"
+
+    - name: Run the real active UFW ownership assertion
+      ansible.builtin.import_tasks: ../../roles/firewall_hardening/tasks/active_manifest_requirement.yml

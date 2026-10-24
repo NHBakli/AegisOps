@@ -1,0 +1,31 @@
+---
+- name: Bootstrap AegisOps administrator
+  hosts: vps
+  become: true
+  gather_facts: false
+
+  roles:
+    - role: users_hardening
+      tags: users
+
+- name: Apply AegisOps hardening as administrator
+  hosts: vps
+  become: true
+  gather_facts: true
+  tags: [ssh, firewall, fail2ban, updates]
+
+  # The users role installs the public key that matches this local private key.
+  # The second play starts a fresh SSH connection under the new account.
+  vars:
+    ansible_user: "{{ users_hardening_admin_username }}"
+    ansible_ssh_private_key_file: "{{ ssh_hardening_probe_private_key | default('') }}"
+
+  roles:
+    - role: ssh_hardening
+      tags: ssh
+    - role: firewall_hardening
+      tags: firewall
+    - role: fail2ban
+      tags: fail2ban
+    - role: updates_hardening
+      tags: updates

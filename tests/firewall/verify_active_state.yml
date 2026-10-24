@@ -1,0 +1,18 @@
+---
+- name: Verify UFW output parsing without touching UFW
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - ../../roles/firewall_hardening/defaults/main.yml
+  vars:
+    ansible_port: 22
+  tasks:
+    - name: Build fixture UFW command result
+      ansible.builtin.set_fact:
+        firewall_hardening_active_details:
+          stdout: "{{ fixture_ufw_status }}"
+          stdout_lines: "{{ fixture_ufw_status.splitlines() }}"
+
+    - name: Run the real active UFW assertions
+      ansible.builtin.import_tasks: ../../roles/firewall_hardening/tasks/verify_active_state.yml

@@ -1,0 +1,110 @@
+---
+- name: Require the fixed harmless probe address to be outside the ignore list
+  ansible.builtin.assert:
+    that:
+      - fail2ban_hardening_probe_ip == '192.0.2.123'
+      - fail2ban_hardening_probe_ip != fail2ban_hardening_admin_source_ip
+    fail_msg: A ban probe may only use the reserved test address outside ignoreip.
+
+- name: Ensure the reserved test address has no pre-existing firewall rule
+  ansible.builtin.command:
+    argv:
+      - iptables-save
+  register: fail2ban_hardening_before_probe_rules
+  changed_when: false
+
+- name: Refuse an existing test-address ban
+  ansible.builtin.assert:
+    that:
+      - fail2ban_hardening_probe_ip not in fail2ban_hardening_before_probe_rules.stdout
+    fail_msg: A firewall rule already references the reserved test address.
+
+- name: Read the SSH jail before the ban probe
+  ansible.builtin.command:
+    argv:
+      - fail2ban-client
+      - status
+      - sshd
+  register: fail2ban_hardening_before_probe_jail
+  changed_when: false
+
+- name: Refuse a test address already banned by Fail2ban
+  ansible.builtin.assert:
+    that:
+      - fail2ban_hardening_probe_ip not in fail2ban_hardening_before_probe_jail.stdout
+    fail_msg: The reserved test address is already banned and must be reviewed.
+
+- name: Exercise an SSH ban and always remove the test address
+  block:
+    - name: Ban the reserved test address in the SSH jail
+      ansible.builtin.command:
+        argv:
+          - fail2ban-client
+          - set
+          - sshd
+          - banip
+          - "{{ fail2ban_hardening_probe_ip }}"
+      changed_when: true
+
+    - name: Inspect installed iptables rules after the test ban
+      ansible.builtin.command:
+        argv:
+          - iptables-save
+      register: fail2ban_hardening_probe_rules
+      changed_when: false
+
+    - name: Require a real firewall rule for the test address
+      ansible.builtin.import_tasks: verify_probe_rule.yml
+
+  rescue:
+    - name: Record a failed Fail2ban ban probe
+      ansible.builtin.set_fact:
+        fail2ban_hardening_probe_failed: true
+
+  always:
+    - name: Remove the reserved test address from the SSH jail
+      ansible.builtin.command:
+        argv:
+          - fail2ban-client
+          - set
+          - sshd
+          - unbanip
+          - "{{ fail2ban_hardening_probe_ip }}"
+      register: fail2ban_hardening_probe_cleanup
+      failed_when: false
+      changed_when: fail2ban_hardening_probe_cleanup.rc == 0
+
+- name: Require the test ban and its cleanup to have succeeded
+  ansible.builtin.assert:
+    that:
+      - not (fail2ban_hardening_probe_failed | default(false))
+      - fail2ban_hardening_probe_cleanup.rc == 0
+    fail_msg: The ban probe failed or its test address could not be unbanned.
+
+- name: Confirm Fail2ban removed the test ban
+  ansible.builtin.command:
+    argv:
+      - fail2ban-client
+      - status
+      - sshd
+  register: fail2ban_hardening_after_probe_jail
+  changed_when: false
+
+- name: Confirm iptables removed the test rule
+  ansible.builtin.command:
+    argv:
+      - iptables-save
+  register: fail2ban_hardening_after_probe_rules
+  changed_when: false
+
+- name: Require the reserved test address to be absent after cleanup
+  ansible.builtin.assert:
+    that:
+      - fail2ban_hardening_probe_ip not in fail2ban_hardening_after_probe_jail.stdout
+      - fail2ban_hardening_probe_ip not in fail2ban_hardening_after_probe_rules.stdout
+    fail_msg: The reserved test address remains banned; remove it from the console.
+
+- name: Mark the ban mechanism as exercised successfully
+  ansible.builtin.set_fact:
+    fail2ban_hardening_verification: >-
+      {{ fail2ban_hardening_verification | combine({'ban_action_tested': true}) }}

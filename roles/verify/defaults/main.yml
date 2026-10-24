@@ -1,0 +1,14 @@
+---
+# Select only protections that have actually been applied.
+verify_users: false
+verify_ssh: false
+verify_firewall: false
+verify_fail2ban: false
+verify_updates: false
+
+# An address and hostname representing the administrator's SSH source.
+# These are required only for contextual SSH verification.
+verify_ssh_source_ip: ""
+verify_ssh_source_host: ""
+verify_ssh_admin_user: ""
+verify_ssh_probe_private_key: ""

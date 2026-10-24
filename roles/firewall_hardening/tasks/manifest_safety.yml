@@ -1,0 +1,26 @@
+---
+- name: Reject unknown persisted UFW rules before any change
+  ansible.builtin.assert:
+    that:
+      - >-
+        (firewall_hardening_rule_manifest_stat.stat.exists | default(false))
+        == (firewall_hardening_intent_manifest_stat.stat.exists | default(false))
+      - >-
+        (firewall_hardening_rule_manifest_stat.stat.exists | default(false))
+        or (
+          firewall_hardening_existing_added_rules.stdout_lines
+          | reject('match', '^Added user rules')
+          | reject('equalto', '') | list | length == 0
+        )
+      - >-
+        not (firewall_hardening_rule_manifest_stat.stat.exists | default(false))
+        or (firewall_hardening_rule_manifest.content | b64decode | trim)
+          == (firewall_hardening_existing_added_rules.stdout | trim)
+      - >-
+        not (firewall_hardening_intent_manifest_stat.stat.exists | default(false))
+        or (firewall_hardening_intent_manifest.content | b64decode | from_json)
+          == firewall_hardening_requested_intent
+    fail_msg: >-
+      Inactive UFW contains unknown or changed rules, or the declared policy
+      differs from its prior AegisOps staging. Review removals and edits
+      manually before changing or activating UFW.

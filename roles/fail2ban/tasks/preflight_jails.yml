@@ -1,0 +1,49 @@
+---
+- name: Check for an existing global Fail2ban local override
+  ansible.builtin.stat:
+    path: /etc/fail2ban/jail.local
+  register: fail2ban_hardening_global_local
+
+- name: Check for an existing Fail2ban jail override directory
+  ansible.builtin.stat:
+    path: /etc/fail2ban/jail.d
+  register: fail2ban_hardening_jail_directory
+
+- name: Require a regular Fail2ban jail directory when present
+  ansible.builtin.assert:
+    that:
+      - >-
+        not (fail2ban_hardening_jail_directory.stat.exists | default(false))
+        or (
+          (fail2ban_hardening_jail_directory.stat.isdir | default(false))
+          and not (fail2ban_hardening_jail_directory.stat.islnk | default(false))
+        )
+    fail_msg: Review a non-directory or symlinked Fail2ban jail.d path first.
+
+- name: Find other local Fail2ban jail overrides
+  ansible.builtin.find:
+    paths: /etc/fail2ban/jail.d
+    patterns: '*.local'
+    recurse: false
+    file_type: any
+  register: fail2ban_hardening_local_overrides
+  when: fail2ban_hardening_jail_directory.stat.isdir | default(false)
+
+- name: Collect existing local files that could redefine the SSH jail
+  ansible.builtin.set_fact:
+    fail2ban_hardening_competing_jail_paths: >-
+      {{
+        (['/etc/fail2ban/jail.local'] if fail2ban_hardening_global_local.stat.exists | default(false) else [])
+        + (fail2ban_hardening_local_overrides.files | default([])
+          | map(attribute='path')
+          | reject('equalto', '/etc/fail2ban/jail.d/90-aegisops-sshd.local') | list)
+      }}
+
+- name: Read other local Fail2ban jail overrides
+  ansible.builtin.slurp:
+    src: "{{ item }}"
+  loop: "{{ fail2ban_hardening_competing_jail_paths }}"
+  register: fail2ban_hardening_competing_jail_contents
+
+- name: Refuse another local SSH jail definition
+  ansible.builtin.import_tasks: assert_no_competing_jails.yml

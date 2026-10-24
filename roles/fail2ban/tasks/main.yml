@@ -1,0 +1,3 @@
+---
+- name: Configure SSH Fail2ban jail
+  ansible.builtin.import_tasks: configure.yml

@@ -1,0 +1,12 @@
+[sshd]
+enabled = true
+filter = sshd
+backend = systemd
+journalmatch = _SYSTEMD_UNIT=ssh.service + _COMM=sshd
+port = {{ ansible_port }}
+protocol = tcp
+maxretry = {{ fail2ban_hardening_maxretry }}
+findtime = {{ fail2ban_hardening_findtime }}
+bantime = {{ fail2ban_hardening_bantime }}
+ignoreip = 127.0.0.1/8 ::1 {{ fail2ban_hardening_admin_source_ip }}
+banaction = {{ fail2ban_hardening_banaction }}

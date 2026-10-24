@@ -1,0 +1,9 @@
+---
+users_hardening_admin_username: ""
+users_hardening_admin_shell: /bin/bash
+users_hardening_admin_groups: []
+users_hardening_admin_public_keys: []
+# Optional crypt(3) hash. Keep this value in an Ansible Vault encrypted vars file.
+users_hardening_admin_password_hash: ""
+# Full hardening reconnects as this account and needs non-interactive become.
+users_hardening_sudo_mode: ""

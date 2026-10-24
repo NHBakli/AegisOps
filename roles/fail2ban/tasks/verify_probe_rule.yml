@@ -1,0 +1,13 @@
+---
+- name: Check for a Fail2ban SSH rule banning the reserved address
+  ansible.builtin.assert:
+    that:
+      - >-
+        fail2ban_hardening_probe_rules.stdout
+        | regex_search('(?m)^-A f2b-sshd\\s+-s\\s+192\\.0\\.2\\.123/32\\s+-j\\s+(REJECT|DROP)(\\s|$)')
+        is not none
+      - >-
+        fail2ban_hardening_probe_rules.stdout
+        | regex_search('(?m)^-A INPUT\\s+.*-j f2b-sshd(\\s|$)')
+        is not none
+    fail_msg: The SSH jail did not install an iptables rule for the test address.

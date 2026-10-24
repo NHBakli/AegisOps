@@ -1,0 +1,13 @@
+---
+- name: Verify firewall platform facts without touching UFW
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Run the real platform fact collection
+      ansible.builtin.import_tasks: ../../roles/firewall_hardening/tasks/platform_facts.yml
+
+    - name: Require virtualization type to be available
+      ansible.builtin.assert:
+        that:
+          - ansible_facts['virtualization_type'] is defined

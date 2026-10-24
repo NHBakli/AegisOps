@@ -1,0 +1,20 @@
+---
+- name: Check the independently observed SSH client address
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - |
+        import ipaddress
+        import sys
+
+        fields = sys.argv[1].split()
+        if len(fields) != 4:
+            sys.exit('SSH_CONNECTION is missing or incomplete')
+        observed = ipaddress.ip_address(fields[0])
+        expected = ipaddress.ip_address(sys.argv[2])
+        if observed != expected:
+            sys.exit('administrator SSH source does not match ignoreip')
+      - "{{ fail2ban_hardening_ssh_probe.stdout }}"
+      - "{{ fail2ban_hardening_admin_source_ip }}"
+  changed_when: false

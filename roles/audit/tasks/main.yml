@@ -1,16 +1,15 @@
 ---
-
 - name: Audit system
   ansible.builtin.import_tasks: system.yml
   tags: system
 
 - name: Audit SSH configuration
   ansible.builtin.import_tasks: ssh.yml
-  tags: ssh
+  tags: [ssh, report]
 
 - name: Audit user accounts
   ansible.builtin.import_tasks: user.yml
-  tags: user
+  tags: [user, report]
 
 - name: Audit network configuration
   ansible.builtin.import_tasks: network.yml
@@ -18,11 +17,11 @@
 
 - name: Audit firewall configuration
   ansible.builtin.import_tasks: firewall.yml
-  tags: firewall
+  tags: [firewall, report]
 
 - name: Audit Update and Upgrade status
   ansible.builtin.import_tasks: updates.yml
-  tags: updates
+  tags: [updates, report]
 
 - name: Generate security report
   ansible.builtin.import_tasks: report.yml

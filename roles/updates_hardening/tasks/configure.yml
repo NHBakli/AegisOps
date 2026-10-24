@@ -1,0 +1,99 @@
+---
+- name: Gather minimal platform facts for automatic updates
+  ansible.builtin.setup:
+    gather_subset:
+      - min
+
+- name: Validate automatic update policy before modifying the host
+  ansible.builtin.import_tasks: preflight.yml
+
+- name: Read existing effective unattended-upgrades origins
+  ansible.builtin.command:
+    argv:
+      - apt-config
+      - dump
+  register: updates_hardening_existing_apt_config
+  changed_when: false
+
+- name: Review existing APT origins before replacing their policy
+  ansible.builtin.import_tasks: review_existing_origins.yml
+
+- name: Install AegisOps security update policy before package installation
+  ansible.builtin.template:
+    src: 99aegisops-unattended-upgrades.j2
+    dest: /etc/apt/apt.conf.d/99aegisops-unattended-upgrades
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+
+- name: Read APT policy before package installation
+  ansible.builtin.command:
+    argv:
+      - apt-config
+      - dump
+  register: updates_hardening_apt_config
+  changed_when: false
+
+- name: Verify security and no-reboot policy before package installation
+  ansible.builtin.import_tasks: verify_policy.yml
+
+- name: Install unattended-upgrades after safe policy is active
+  ansible.builtin.apt:
+    name: unattended-upgrades
+    state: present
+    update_cache: false
+
+- name: Read effective APT policy after package installation
+  ansible.builtin.command:
+    argv:
+      - apt-config
+      - dump
+  register: updates_hardening_apt_config
+  changed_when: false
+
+- name: Verify effective APT security and reboot policy after installation
+  ansible.builtin.import_tasks: verify_policy.yml
+
+- name: Enable and start APT package list timer
+  ansible.builtin.systemd:
+    name: apt-daily.timer
+    enabled: true
+    state: started
+
+- name: Enable and start unattended upgrade timer
+  ansible.builtin.systemd:
+    name: apt-daily-upgrade.timer
+    enabled: true
+    state: started
+
+- name: Read effective timer states
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-enabled
+      - "{{ item }}"
+  loop:
+    - apt-daily.timer
+    - apt-daily-upgrade.timer
+  register: updates_hardening_enabled_timers
+  changed_when: false
+
+- name: Read active timer states
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - "{{ item }}"
+  loop:
+    - apt-daily.timer
+    - apt-daily-upgrade.timer
+  register: updates_hardening_active_timers
+  changed_when: false
+
+- name: Require both APT timers to be enabled and active
+  ansible.builtin.assert:
+    that:
+      - updates_hardening_enabled_timers.results | map(attribute='stdout') | list == ['enabled', 'enabled']
+      - updates_hardening_active_timers.results | map(attribute='stdout') | list == ['active', 'active']
+    fail_msg: APT daily timers must both be enabled and active.

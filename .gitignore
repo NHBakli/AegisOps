@@ -32,5 +32,12 @@ venv/
 
 # System files
 .DS_Store
-
+AGENTS.md
+# Local agent and cloud configuration
+.agents
+.aws
+.codex
 Context.md
+
+# Local Ansible variables
+/admin-vars.yml

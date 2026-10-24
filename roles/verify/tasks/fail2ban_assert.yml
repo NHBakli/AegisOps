@@ -1,0 +1,12 @@
+---
+- name: Assert effective Fail2ban SSH jail state
+  ansible.builtin.assert:
+    that:
+      - verify_fail2ban_service.stdout | trim == 'active'
+      - "'Status for the jail: sshd' in verify_fail2ban_jail.stdout"
+      - "'ssh.service' in verify_fail2ban_settings.results[1].stdout"
+      - fail2ban_hardening_banaction | default('iptables-multiport') in verify_fail2ban_settings.results[2].stdout
+      - verify_fail2ban_settings.results[3].stdout | trim | int == fail2ban_hardening_maxretry | default(5)
+      - verify_fail2ban_settings.results[4].stdout | trim | int == fail2ban_hardening_findtime | default(600)
+      - verify_fail2ban_settings.results[5].stdout | trim | int == fail2ban_hardening_bantime | default(600)
+    fail_msg: Effective Fail2ban service, jail, journal, action, or thresholds differ from expectations.

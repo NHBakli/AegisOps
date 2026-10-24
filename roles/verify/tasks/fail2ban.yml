@@ -1,0 +1,60 @@
+---
+- name: Require the administrator source address to verify Fail2ban
+  ansible.builtin.assert:
+    that:
+      - fail2ban_hardening_admin_source_ip | default('') | length > 0
+      - fail2ban_hardening_banaction | default('iptables-multiport') == 'iptables-multiport'
+      - ansible_port is defined
+    fail_msg: Supply the administrator source address and expected ban action.
+
+- name: Require an IPv4 administrator source for the configured ban action
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -c
+      - 'import ipaddress,sys; assert ipaddress.ip_address(sys.argv[1]).version == 4'
+      - "{{ fail2ban_hardening_admin_source_ip }}"
+  changed_when: false
+
+- name: Read actual IPv6 TCP listeners
+  ansible.builtin.slurp:
+    src: /proc/net/tcp6
+  register: fail2ban_hardening_tcp6
+
+- name: Refuse an IPv6 SSH listener outside the IPv4 ban action's scope
+  ansible.builtin.import_tasks: ../../fail2ban/tasks/verify_ipv4_scope.yml
+
+- name: Read Fail2ban service state
+  ansible.builtin.command:
+    argv: [systemctl, is-active, fail2ban]
+  register: verify_fail2ban_service
+  changed_when: false
+
+- name: Read SSH jail status from Fail2ban
+  ansible.builtin.command:
+    argv: [fail2ban-client, status, sshd]
+  register: verify_fail2ban_jail
+  changed_when: false
+
+- name: Read effective Fail2ban SSH settings
+  ansible.builtin.command:
+    argv:
+      - fail2ban-client
+      - get
+      - sshd
+      - "{{ item }}"
+  loop:
+    - ignoreip
+    - journalmatch
+    - actions
+    - maxretry
+    - findtime
+    - bantime
+  register: verify_fail2ban_settings
+  changed_when: false
+
+- name: Confirm the administrator address belongs to an ignored network
+  ansible.builtin.import_tasks: fail2ban_ignoreip.yml
+
+- name: Require active SSH jail, journal source, ban action, and thresholds
+  ansible.builtin.import_tasks: fail2ban_assert.yml

@@ -1,0 +1,10 @@
+---
+# Automatic reboot remains disabled without approval.
+updates_hardening_include_esm: false
+updates_hardening_replace_existing_origins_confirmed: false
+updates_hardening_automatic_reboot: false
+updates_hardening_reboot_time: "03:00"
+
+# Required only when automatic reboot is deliberately enabled.
+updates_hardening_reboot_approved_host: ""
+updates_hardening_recovery_confirmed: false

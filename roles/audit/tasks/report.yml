@@ -1,8 +1,7 @@
 ---
-
 - name: Create local reports directory
   ansible.builtin.file:
-    path: "{{ playbook_dir }}/../reports"
+    path: "{{ audit_report_directory | default(playbook_dir ~ '/../reports') }}"
     state: directory
     mode: "0700"
   delegate_to: localhost
@@ -10,27 +9,28 @@
 
 - name: Calculate security audit summary
   ansible.builtin.set_fact:
-    audit_summary:
-      total: "{{ all_security_checks | length }}"
-      passed: "{{ all_security_checks | selectattr('status', 'equalto', 'PASS') | list | length }}"
-      failed: "{{ all_security_checks | selectattr('status', 'equalto', 'FAIL') | list | length }}"
-      warnings: "{{ all_security_checks | selectattr('status', 'equalto', 'WARN') | list | length }}"
-      review: "{{ all_security_checks | selectattr('status', 'equalto', 'REVIEW') | list | length }}"
+    audit_summary: "{{ summary_counts }}"
   vars:
     all_security_checks: >-
       {{
-        (
-          ssh_security_checks.values() | list
-          + user_security_checks.values() | list
-          + firewall_security_checks.values() | list
-          + updates_security_checks.values() | list
-        )
+        (ssh_security_checks.values() | list)
+        + (user_security_checks.values() | list)
+        + (firewall_security_checks.values() | list)
+        + (updates_security_checks.values() | list)
       }}
+    summary_counts: >-
+      {{ {
+        'total': all_security_checks | length,
+        'passed': all_security_checks | selectattr('status', 'equalto', 'PASS') | list | length,
+        'failed': all_security_checks | selectattr('status', 'equalto', 'FAIL') | list | length,
+        'warnings': all_security_checks | selectattr('status', 'equalto', 'WARN') | list | length,
+        'review': all_security_checks | selectattr('status', 'equalto', 'REVIEW') | list | length
+      } }}
 
 - name: Generate JSON security report
   ansible.builtin.copy:
     content: "{{ security_report | to_nice_json }}"
-    dest: "{{ playbook_dir }}/../reports/{{ inventory_hostname }}.json"
+    dest: "{{ audit_report_directory | default(playbook_dir ~ '/../reports') }}/{{ inventory_hostname }}.json"
     mode: "0600"
   delegate_to: localhost
   become: false

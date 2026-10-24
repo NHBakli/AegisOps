@@ -1,0 +1,104 @@
+---
+- name: Gather platform and virtualization facts before firewall changes
+  ansible.builtin.import_tasks: platform_facts.yml
+
+- name: Require supported platform before preparing UFW
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution'] == 'Ubuntu'
+      - ansible_facts['distribution_version'] == '22.04'
+      - not ansible_check_mode
+    fail_msg: >-
+      UFW preparation currently supports only Ubuntu 22.04. Check mode cannot
+      verify staged UFW rules; use an isolated test host instead.
+
+- name: Validate firewall rule input before changing the host
+  ansible.builtin.import_tasks: validate_rules.yml
+
+- name: Record the exact requested firewall intent
+  ansible.builtin.set_fact:
+    firewall_hardening_requested_intent:
+      ssh_port: "{{ ansible_port | int }}"
+      allowed_inbound: "{{ firewall_hardening_allowed_inbound }}"
+      default_incoming: "{{ firewall_hardening_default_incoming }}"
+      default_outgoing: "{{ firewall_hardening_default_outgoing }}"
+
+- name: Check whether UFW is already installed
+  ansible.builtin.command:
+    argv:
+      - dpkg-query
+      - -W
+      - -f=${Status}
+      - ufw
+  register: firewall_hardening_package_status
+  changed_when: false
+  failed_when: false
+
+- name: Read existing UFW state if installed
+  ansible.builtin.command:
+    argv:
+      - ufw
+      - status
+  register: firewall_hardening_initial_status
+  changed_when: false
+  failed_when: false
+  environment:
+    LC_ALL: C
+  when: >-
+    firewall_hardening_package_status.rc == 0
+    and 'install ok installed' in firewall_hardening_package_status.stdout
+
+- name: Refuse preparation against a running or unreadable firewall
+  ansible.builtin.assert:
+    that:
+      - >-
+        firewall_hardening_package_status.rc != 0
+        or 'install ok installed' not in firewall_hardening_package_status.stdout
+        or firewall_hardening_initial_status.rc == 0
+      - >-
+        firewall_hardening_activate | bool
+        or firewall_hardening_package_status.rc != 0
+        or 'install ok installed' not in firewall_hardening_package_status.stdout
+        or (firewall_hardening_initial_status.stdout_lines | default([]) | first | default('') | trim) == 'Status: inactive'
+    fail_msg: >-
+      Preparation refuses an active or unreadable UFW instance because rule
+      and policy edits could immediately affect existing access.
+
+- name: Record whether UFW was active before this run
+  ansible.builtin.set_fact:
+    firewall_hardening_initially_active: >-
+      {{
+        firewall_hardening_package_status.rc == 0
+        and 'install ok installed' in firewall_hardening_package_status.stdout
+        and (firewall_hardening_initial_status.stdout_lines | default([]) | first | default('') | trim) == 'Status: active'
+      }}
+
+- name: Check activation prerequisites before changing any firewall rule
+  ansible.builtin.import_tasks: activation_preflight.yml
+  when: firewall_hardening_activate | bool
+
+- name: Verify an already active UFW without modifying its rules
+  ansible.builtin.import_tasks: verify_active.yml
+  when: firewall_hardening_initially_active | bool
+
+- name: Stage UFW rules while it is still inactive
+  ansible.builtin.import_tasks: stage_rules.yml
+  when: not (firewall_hardening_initially_active | bool)
+
+- name: Read final UFW state
+  ansible.builtin.command:
+    argv:
+      - ufw
+      - status
+  register: firewall_hardening_final_status
+  changed_when: false
+  environment:
+    LC_ALL: C
+
+- name: Verify activation matches the requested mode
+  ansible.builtin.assert:
+    that:
+      - >-
+        (firewall_hardening_final_status.stdout_lines | first | default('') | trim)
+        == ('Status: active' if firewall_hardening_activate | bool else 'Status: inactive')
+    fail_msg: The resulting UFW state did not match the requested mode.

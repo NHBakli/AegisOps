@@ -1,0 +1,15 @@
+---
+- name: Verify the real competing-jail guard locally
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Supply a fixture local jail file
+      ansible.builtin.set_fact:
+        fail2ban_hardening_competing_jail_contents:
+          results:
+            - source: /tmp/jail.local
+              content: "{{ fixture_jail | b64encode }}"
+
+    - name: Apply the real competing-jail guard
+      ansible.builtin.import_tasks: ../../roles/fail2ban/tasks/assert_no_competing_jails.yml

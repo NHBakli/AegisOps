@@ -1,0 +1,13 @@
+---
+- name: Exercise pre-existing APT origin review without changing the host
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Build fixture effective APT configuration
+      ansible.builtin.set_fact:
+        updates_hardening_existing_apt_config:
+          stdout_lines: "{{ fixture_existing_lines }}"
+
+    - name: Run the real pre-existing origin guard
+      ansible.builtin.import_tasks: ../../roles/updates_hardening/tasks/review_existing_origins.yml

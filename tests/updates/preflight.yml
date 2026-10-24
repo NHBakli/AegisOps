@@ -1,0 +1,12 @@
+---
+- name: Exercise update policy guards without changing the host
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_facts:
+      distribution: Ubuntu
+      distribution_version: "22.04"
+  tasks:
+    - name: Run the real update policy preflight
+      ansible.builtin.import_tasks: ../../roles/updates_hardening/tasks/preflight.yml

@@ -1,0 +1,96 @@
+---
+- name: Read the Fail2ban service state
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - fail2ban
+  register: fail2ban_hardening_service_state
+  changed_when: false
+
+- name: Read the SSH jail status
+  ansible.builtin.command:
+    argv:
+      - fail2ban-client
+      - status
+      - sshd
+  register: fail2ban_hardening_jail_status
+  changed_when: false
+
+- name: Read the effective SSH jail ignore list
+  ansible.builtin.command:
+    argv:
+      - fail2ban-client
+      - get
+      - sshd
+      - ignoreip
+  register: fail2ban_hardening_ignoreip
+  changed_when: false
+
+- name: Read the effective SSH journal match
+  ansible.builtin.command:
+    argv:
+      - fail2ban-client
+      - get
+      - sshd
+      - journalmatch
+  register: fail2ban_hardening_journalmatch
+  changed_when: false
+
+- name: Read the effective SSH ban action
+  ansible.builtin.command:
+    argv:
+      - fail2ban-client
+      - get
+      - sshd
+      - actions
+  register: fail2ban_hardening_actions
+  changed_when: false
+
+- name: Read the effective SSH jail retry threshold
+  ansible.builtin.command:
+    argv:
+      - fail2ban-client
+      - get
+      - sshd
+      - maxretry
+  register: fail2ban_hardening_effective_maxretry
+  changed_when: false
+
+- name: Read the effective SSH jail timing
+  ansible.builtin.command:
+    argv:
+      - fail2ban-client
+      - get
+      - sshd
+      - "{{ item }}"
+  loop:
+    - findtime
+    - bantime
+  register: fail2ban_hardening_effective_timing
+  changed_when: false
+
+- name: Require the configured SSH jail to be active and protective
+  ansible.builtin.assert:
+    that:
+      - fail2ban_hardening_service_state.stdout | trim == 'active'
+      - "'Status for the jail: sshd' in fail2ban_hardening_jail_status.stdout"
+      - "'ssh.service' in fail2ban_hardening_journalmatch.stdout"
+      - fail2ban_hardening_banaction in fail2ban_hardening_actions.stdout
+      - fail2ban_hardening_effective_maxretry.stdout | trim | int == fail2ban_hardening_maxretry
+      - fail2ban_hardening_effective_timing.results[0].stdout | trim | int == fail2ban_hardening_findtime
+      - fail2ban_hardening_effective_timing.results[1].stdout | trim | int == fail2ban_hardening_bantime
+    fail_msg: >-
+      Fail2ban must have an active SSH jail, the SSH systemd journal, the
+      protected administrator source IP, and the requested retry settings.
+
+- name: Require the effective ignore list to protect the administrator
+  ansible.builtin.import_tasks: verify_ignoreip.yml
+
+- name: Record the extent of Fail2ban verification
+  ansible.builtin.set_fact:
+    fail2ban_hardening_verification:
+      service_active: true
+      ssh_jail_active: true
+      administrator_ignored: true
+      ban_action_tested: false

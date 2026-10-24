@@ -1,0 +1,16 @@
+---
+- name: Verify the real Fail2ban ignore-list guard locally
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    fail2ban_hardening_admin_source_ip: 198.51.100.7
+    fail2ban_hardening_probe_ip: 192.0.2.123
+  tasks:
+    - name: Supply a fixture Fail2ban client response
+      ansible.builtin.set_fact:
+        fail2ban_hardening_ignoreip:
+          stdout: "{{ fixture_ignoreip }}"
+
+    - name: Apply the real ignore-list guard
+      ansible.builtin.import_tasks: ../../roles/fail2ban/tasks/verify_ignoreip.yml

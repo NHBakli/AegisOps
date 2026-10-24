@@ -1,0 +1,11 @@
+---
+- name: Render the real APT policy in an isolated directory
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Render AegisOps APT policy
+      ansible.builtin.template:
+        src: ../../roles/updates_hardening/templates/99aegisops-unattended-upgrades.j2
+        dest: "{{ fixture_config_dir }}/99aegisops-unattended-upgrades"
+        mode: "0644"

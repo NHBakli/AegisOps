@@ -1,0 +1,12 @@
+---
+- name: Require all other local jail files to leave SSH ownership to AegisOps
+  ansible.builtin.assert:
+    that:
+      - >-
+        (item.content | b64decode).splitlines()
+        | select('match', '(?i)^\\s*\\[sshd\\]\\s*(?:[;#].*)?$')
+        | list | length == 0
+    fail_msg: "Another local Fail2ban file defines [sshd]: {{ item.source | default(item.item | default('unknown')) }}"
+  loop: "{{ fail2ban_hardening_competing_jail_contents.results }}"
+  loop_control:
+    label: "{{ item.source | default(item.item | default('local override')) }}"

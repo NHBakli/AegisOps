@@ -1,0 +1,27 @@
+---
+- name: Assert effective unattended-upgrades configuration
+  ansible.builtin.assert:
+    that:
+      - "'install ok installed' in verify_updates_package.stdout"
+      - "'APT::Periodic::Update-Package-Lists \"1\";' in verify_updates_apt.stdout_lines"
+      - "'APT::Periodic::Unattended-Upgrade \"1\";' in verify_updates_apt.stdout_lines"
+      - >-
+        verify_updates_apt.stdout_lines
+        | select('match', '^Unattended-Upgrade::Allowed-Origins:: ')
+        | list ==
+        (['Unattended-Upgrade::Allowed-Origins:: "${distro_id}:${distro_codename}-security";']
+         + (['Unattended-Upgrade::Allowed-Origins:: "${distro_id}ESMApps:${distro_codename}-apps-security";',
+             'Unattended-Upgrade::Allowed-Origins:: "${distro_id}ESM:${distro_codename}-infra-security";']
+            if updates_hardening_include_esm | default(false) | bool else []))
+      - >-
+        verify_updates_apt.stdout_lines
+        | select('match', '^Unattended-Upgrade::Origins-Pattern:: ')
+        | list | length == 0
+      - >-
+        ('Unattended-Upgrade::Automatic-Reboot "'
+         ~ ('true' if updates_hardening_automatic_reboot | default(false) | bool else 'false')
+         ~ '";') in verify_updates_apt.stdout_lines
+      - "'Unattended-Upgrade::Automatic-Reboot-WithUsers \"false\";' in verify_updates_apt.stdout_lines"
+      - verify_updates_timers_enabled.results | map(attribute='stdout') | list == ['enabled', 'enabled']
+      - verify_updates_timers_active.results | map(attribute='stdout') | list == ['active', 'active']
+    fail_msg: Effective APT security policy, reboot setting, package, or timers differ from expectations.

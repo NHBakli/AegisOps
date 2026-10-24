@@ -1,0 +1,10 @@
+---
+- name: Validate the real Fail2ban address guard locally
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    fail2ban_hardening_probe_ip: 192.0.2.123
+  tasks:
+    - name: Apply the real IPv4 address guard
+      ansible.builtin.import_tasks: ../../roles/fail2ban/tasks/validate_addresses.yml
