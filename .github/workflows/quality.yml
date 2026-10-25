@@ -14,14 +14,26 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ansible-core ansible-lint
+      - name: Inspect the system Ansible toolchain
+        run: |
+          export PATH="/usr/bin:/usr/sbin:/bin:/sbin:$PATH"
+          ansible --version
+          python3 -c 'import ansible; print(f"Ansible Python module: {ansible.__version__}")'
       - name: Install pinned Ansible collections
-        run: ansible-galaxy collection install -r requirements.yml --force
+        run: |
+          export PATH="/usr/bin:/usr/sbin:/bin:/sbin:$PATH"
+          ansible-galaxy collection install -r requirements.yml --force
       - name: Check playbook syntax
         run: |
+          export PATH="/usr/bin:/usr/sbin:/bin:/sbin:$PATH"
           ansible-playbook -i inventories/example/hosts.yml playbooks/audit.yml --syntax-check
           ansible-playbook -i inventories/example/hosts.yml playbooks/hardening.yml --syntax-check
           ansible-playbook -i inventories/example/hosts.yml playbooks/verify.yml --syntax-check
       - name: Lint repository
-        run: ansible-lint --offline
+        run: |
+          export PATH="/usr/bin:/usr/sbin:/bin:/sbin:$PATH"
+          ansible-lint --offline
       - name: Run local tests
-        run: python3 -m unittest discover -s tests -p 'test_*.py'
+        run: |
+          export PATH="/usr/bin:/usr/sbin:/bin:/sbin:$PATH"
+          python3 -m unittest discover -s tests -p 'test_*.py'
