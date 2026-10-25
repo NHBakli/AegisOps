@@ -8,7 +8,6 @@
       - fail2ban_hardening_approved_host == inventory_hostname
       - fail2ban_hardening_recovery_confirmed | bool
       - fail2ban_hardening_admin_source_ip is string
-      - fail2ban_hardening_admin_source_ip | length > 0
       - fail2ban_hardening_admin_user is match('^[a-z_][a-z0-9_-]{0,30}$')
       - fail2ban_hardening_admin_user != 'root'
       - ansible_user is defined
@@ -26,18 +25,11 @@
       - (ansible_port | default(0) | int) >= 1
       - (ansible_port | default(0) | int) <= 65535
       - ansible_facts['virtualization_type'] is defined
-      - >-
-        (ansible_facts['virtualization_type'] | default('') | lower)
-        not in ['lxc', 'container', 'openvz', 'docker', 'podman']
-        or fail2ban_hardening_lxc_compatibility_confirmed | bool
     fail_msg: >-
       Fail2ban requires Ubuntu 22.04, host-specific approval, console recovery,
       a tested non-root administrator with its SSH key and source IP, safe jail
       values, and separate LXC compatibility confirmation. Check mode is
       unsupported when enabled.
-
-- name: Require an IPv4 administrator source and the reserved IPv4 probe
-  ansible.builtin.import_tasks: validate_addresses.yml
 
 - name: Read listening IPv6 TCP sockets before changing Fail2ban
   ansible.builtin.slurp:

@@ -3,7 +3,7 @@
   ansible.builtin.assert:
     that:
       - fail2ban_hardening_probe_ip == '192.0.2.123'
-      - fail2ban_hardening_probe_ip != fail2ban_hardening_admin_source_ip
+      - fail2ban_hardening_probe_ip != (fail2ban_hardening_effective_admin_source_ip | default(fail2ban_hardening_admin_source_ip))
     fail_msg: A ban probe may only use the reserved test address outside ignoreip.
 
 - name: Ensure the reserved test address has no pre-existing firewall rule

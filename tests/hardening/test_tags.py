@@ -1,5 +1,6 @@
 """Check the public hardening tag contract without touching a remote host."""
 
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -28,6 +29,12 @@ class HardeningTagsTest(unittest.TestCase):
             environment["ANSIBLE_LOCAL_TEMP"] = str(Path(temp) / "ansible-tmp")
             environment["ANSIBLE_REMOTE_TEMP"] = str(Path(temp) / "remote-tmp")
             environment["XDG_CACHE_HOME"] = str(Path(temp) / "cache")
+            test_variables = json.dumps({
+                "users_hardening_admin_bootstrapped": False,
+                "users_hardening_admin_username": "",
+                "users_hardening_admin_public_keys": [],
+                "users_hardening_sudo_mode": "nopasswd",
+            })
             return subprocess.run(
                 [
                     "ansible-playbook",
@@ -35,6 +42,8 @@ class HardeningTagsTest(unittest.TestCase):
                     str(inventory),
                     "playbooks/hardening.yml",
                     *extra_args,
+                    "-e",
+                    test_variables,
                 ],
                 cwd=ROOT,
                 env=environment,

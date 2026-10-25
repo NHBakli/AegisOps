@@ -1,16 +1,16 @@
 # Vérifier le durcissement
 
 `verify.yml` lit l'état réel de l'hôte et ne modifie rien. Choisis les
-contrôles dans un fichier `verify-vars.yml`, puis lance :
+contrôles dans `hardening-vars.yml`, que le playbook charge automatiquement :
 
 ```bash
-ansible-playbook -i inventories/production/hosts.yml playbooks/verify.yml -e @verify-vars.yml
+ansible-playbook -i inventories/production/hosts.local.yml playbooks/verify.yml
 ```
 
 Au moins une section `verify_*` doit être à `true`. Les contrôles sélectionnés
 échouent si l'état réel ne correspond pas aux variables attendues.
 
-## Variables à fournir
+## Variables à fournir dans `hardening-vars.yml`
 
 - **Utilisateurs** : `verify_users: true` et les variables `users_hardening_*`
   du compte attendu.

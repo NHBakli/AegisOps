@@ -21,7 +21,7 @@
             sys.exit('administrator source is absent from effective ignoreip')
         if any(probe in network for network in networks):
             sys.exit('reserved probe address is covered by effective ignoreip')
-      - "{{ fail2ban_hardening_admin_source_ip }}"
+      - "{{ fail2ban_hardening_effective_admin_source_ip | default(fail2ban_hardening_admin_source_ip) }}"
       - "{{ fail2ban_hardening_probe_ip }}"
       - "{{ fail2ban_hardening_ignoreip.stdout }}"
   changed_when: false

@@ -14,6 +14,6 @@
             sys.exit('Fail2ban IPv4 probe cannot verify IPv6 SSH protection')
         if admin == probe or admin.is_loopback or str(admin) != sys.argv[1]:
             sys.exit('invalid administrator or test IPv4 address')
-      - "{{ fail2ban_hardening_admin_source_ip }}"
+      - "{{ fail2ban_hardening_effective_admin_source_ip | default(fail2ban_hardening_admin_source_ip) }}"
       - "{{ fail2ban_hardening_probe_ip }}"
   changed_when: false

@@ -10,6 +10,7 @@
         or (
           firewall_hardening_existing_added_rules.stdout_lines
           | reject('match', '^Added user rules')
+          | reject('equalto', '(None)')
           | reject('equalto', '') | list | length == 0
         )
       - >-

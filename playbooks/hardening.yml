@@ -3,16 +3,22 @@
   hosts: vps
   become: true
   gather_facts: false
+  vars_files:
+    - - ../hardening-vars.yml
+      - ../hardening-vars.yml.example
 
   roles:
     - role: users_hardening
       tags: users
+      when: not (users_hardening_admin_bootstrapped | bool)
 
 - name: Apply AegisOps hardening as administrator
   hosts: vps
   become: true
   gather_facts: true
-  tags: [ssh, firewall, fail2ban, updates]
+  vars_files:
+    - - ../hardening-vars.yml
+      - ../hardening-vars.yml.example
 
   # The users role installs the public key that matches this local private key.
   # The second play starts a fresh SSH connection under the new account.

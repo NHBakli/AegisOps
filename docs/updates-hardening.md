@@ -4,17 +4,15 @@ Le rôle configure `unattended-upgrades` pour installer les mises à jour de
 sécurité Ubuntu, puis active les timers APT. Il ne lance pas de mise à jour
 immédiate. **Le redémarrage automatique reste désactivé par défaut.**
 
-Le play complet crée d'abord l'administrateur puis se reconnecte avec lui.
-`--tags updates` saute la création : le compte doit déjà exister. Charge aussi
-`admin-vars.yml` afin que le playbook utilise ce compte :
+Configure les options dans `hardening-vars.yml`. Le playbook charge ce fichier
+automatiquement :
 
 ```bash
-ansible-playbook -i inventories/production/hosts.yml playbooks/hardening.yml \
-  --tags updates -e @admin-vars.yml
+ansible-playbook -i inventories/production/hosts.local.yml playbooks/hardening.yml \
+  --tags updates
 ```
 
-Ajoute `--ask-vault-pass` seulement si `admin-vars.yml` est chiffré avec
-Vault.
+Ajoute `--ask-vault-pass` si `hardening-vars.yml` est chiffré avec Vault.
 
 Par défaut, seules les mises à jour `jammy-security` sont configurées. Si APT
 contient des origines personnalisées, le rôle s'arrête. Après revue, leur

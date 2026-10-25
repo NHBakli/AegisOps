@@ -22,9 +22,17 @@ class VerifyTest(unittest.TestCase):
             env["ANSIBLE_LOCAL_TEMP"] = str(Path(temp) / "ansible")
             env["ANSIBLE_REMOTE_TEMP"] = str(Path(temp) / "remote")
             env["XDG_CACHE_HOME"] = str(Path(temp) / "cache")
+            test_variables = {
+                "verify_users": False,
+                "verify_ssh": False,
+                "verify_firewall": False,
+                "verify_fail2ban": False,
+                "verify_updates": False,
+            }
+            test_variables.update(variables)
             return subprocess.run(
                 ["ansible-playbook", "-i", str(inventory), playbook,
-                 "-e", json.dumps(variables), *extra_args],
+                 "-e", json.dumps(test_variables), *extra_args],
                 cwd=ROOT,
                 env=env,
                 capture_output=True,
@@ -53,9 +61,9 @@ class VerifyTest(unittest.TestCase):
         self.assertIn("changed=0", result.stdout)
 
     def test_ssh_contexts_detect_root_or_password_regression(self):
-        admin = ["port 22", "pubkeyauthentication yes",
+        admin = ["port 22", "pubkeyauthentication yes", "addressfamily any",
                  "passwordauthentication no", "kbdinteractiveauthentication no"]
-        root = ["permitrootlogin no", "passwordauthentication no",
+        root = ["permitrootlogin no", "addressfamily any", "passwordauthentication no",
                 "kbdinteractiveauthentication no"]
         base = {"fixture_kind": "ssh", "fixture_admin_ssh_lines": admin,
                 "fixture_root_ssh_lines": root}

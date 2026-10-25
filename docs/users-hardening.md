@@ -1,44 +1,27 @@
 # Compte administrateur
 
-Crée `admin-vars.yml` **à la racine du dépôt**, au même niveau que
-`ansible.cfg`. Le playbook crée ce compte avec la connexion actuelle, puis
-ouvre une nouvelle connexion SSH avec lui pour continuer le hardening.
+Les playbooks chargent automatiquement `hardening-vars.yml` à la racine du
+dépôt. Crée ce fichier depuis `hardening-vars.yml.example`, puis renseigne le
+nom du compte, sa clé publique et le chemin absolu de la clé privée locale.
 
-## `admin-vars.yml`
+Sans hash de mot de passe, le rôle verrouille le mot de passe Unix. L'accès se
+fait par clé SSH, avec les droits `sudo` définis explicitement. Le rôle
+conserve les clés déjà installées et ne supprime pas de compte.
 
-```yaml
-users_hardening_admin_username: aegisadmin
-users_hardening_admin_shell: /bin/bash
-users_hardening_admin_groups: []
-users_hardening_admin_public_keys:
-  - "ssh-ed25519 AAAA... ta-clé-publique"
-users_hardening_sudo_mode: nopasswd
-ssh_hardening_probe_private_key: /home/you/.ssh/id_ed25519
-```
-
-Le compte n'a pas besoin de mot de passe pour SSH par clé avec sudo
-`nopasswd`. Sans hash fourni, le rôle verrouille le mot de passe Unix.
-Ubuntu permet toujours l'accès SSH par clé à ce compte. Remplace la clé par le
-contenu du fichier `.pub`. Le chemin de clé privée doit lui correspondre et
-rester sur ta machine. Les rôles suivants utilisent `sudo -n`.
-
-Aucun mot de passe ni Vault ne sont requis pour le flux normal. Si tu as besoin
-d'un mot de passe local, ajoute son hash SHA-512 dans
-`users_hardening_admin_password_hash` et chiffre le fichier. Vault ne sauvegarde
-pas automatiquement les mots de passe générés par un playbook. Ne mets jamais
-un mot de passe en clair dans ce fichier.
-
-Pour créer seulement le compte :
+Pour créer le compte seulement, laisse
+`users_hardening_admin_bootstrapped: false` puis lance :
 
 ```bash
-ansible-playbook playbooks/hardening.yml --tags users -e @admin-vars.yml
+ansible-playbook -i inventories/production/hosts.local.yml \
+  playbooks/hardening.yml --tags users
 ```
 
-Pour lancer tous les rôles, ajoute `-e @admin-vars.yml` à la commande du
-README après avoir renseigné les prérequis SSH et pare-feu. Si le fichier
-contient un hash Vaulté, ajoute `--ask-vault-pass`. Le premier play crée le
-compte avec la connexion actuelle ; le second se reconnecte avec l'admin.
-Le rôle conserve les clés existantes et ajoute une règle sudo dédiée.
+Garde la session initiale ouverte. Teste une nouvelle connexion SSH avec le
+compte créé, puis vérifie `sudo -n true`. Quand ces tests réussissent, passe
+`users_hardening_admin_bootstrapped` à `true` dans `hardening-vars.yml`. Les
+exécutions suivantes passeront le bootstrap et se connecteront directement
+avec le compte administrateur.
 
-Ne partage et ne stocke jamais une clé privée dans le dépôt. `--check` ne
-permet pas de tester la nouvelle connexion.
+Si tu ajoutes un hash de mot de passe local, chiffre le fichier complet avec
+Ansible Vault. Ne mets jamais un mot de passe en clair et ne partage jamais
+la clé privée.

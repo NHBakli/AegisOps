@@ -3,6 +3,9 @@
   hosts: vps
   become: true
   gather_facts: true
+  vars_files:
+    - - ../hardening-vars.yml
+      - ../hardening-vars.yml.example
 
   roles:
     - audit

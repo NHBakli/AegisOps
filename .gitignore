@@ -1,5 +1,7 @@
-inventories/lab/hosts.yml
-inventories/production/hosts.yml
+# Local inventories
+/inventories/lab/hosts.yml
+/inventories/production/hosts.yml
+/inventories/production/hosts.local.yml
 
 # Security audit reports
 reports/
@@ -41,3 +43,6 @@ Context.md
 
 # Local Ansible variables
 /admin-vars.yml
+/ssh-vars.yml
+/fail2ban-vars.yml
+/hardening-vars.yml

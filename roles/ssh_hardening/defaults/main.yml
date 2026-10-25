@@ -3,6 +3,8 @@
 ssh_hardening_disable_root_login: true
 ssh_hardening_disable_password_auth: true
 ssh_hardening_disable_keyboard_interactive: true
+# Keep the listener dual-stack by default; set to inet for IPv4-only SSH.
+ssh_hardening_address_family: any
 
 # Required approvals and the independently tested administrator connection.
 ssh_hardening_approved_host: ""

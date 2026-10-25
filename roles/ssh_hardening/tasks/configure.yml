@@ -11,7 +11,12 @@
       - ansible_facts['distribution_version'] == '22.04'
       - ssh_hardening_include_directory_path == '/etc/ssh/sshd_config.d'
       - not ansible_check_mode
-      - ssh_hardening_disable_root_login | bool or ssh_hardening_disable_password_auth | bool or ssh_hardening_disable_keyboard_interactive | bool
+      - >-
+        ssh_hardening_disable_root_login | bool
+        or ssh_hardening_disable_password_auth | bool
+        or ssh_hardening_disable_keyboard_interactive | bool
+        or ssh_hardening_address_family != 'any'
+      - ssh_hardening_address_family in ['any', 'inet', 'inet6']
       - ssh_hardening_approved_host == inventory_hostname
       - ssh_hardening_recovery_confirmed | bool
       - ssh_hardening_independent_login_confirmed | bool
@@ -82,6 +87,7 @@
           {% if ssh_hardening_disable_keyboard_interactive | bool %}
           KbdInteractiveAuthentication no
           {% endif %}
+          AddressFamily {{ ssh_hardening_address_family }}
           PubkeyAuthentication yes
         backup: true
         validate: /usr/sbin/sshd -t -f %s
@@ -104,6 +110,7 @@
           - not (ssh_hardening_disable_root_login | bool) or 'permitrootlogin no' in ssh_hardening_effective_config.stdout_lines
           - not (ssh_hardening_disable_password_auth | bool) or 'passwordauthentication no' in ssh_hardening_effective_config.stdout_lines
           - not (ssh_hardening_disable_keyboard_interactive | bool) or 'kbdinteractiveauthentication no' in ssh_hardening_effective_config.stdout_lines
+          - "'addressfamily ' ~ ssh_hardening_address_family in ssh_hardening_effective_config.stdout_lines"
           - "'pubkeyauthentication yes' in ssh_hardening_effective_config.stdout_lines"
         fail_msg: Requested SSH settings are not effective in the global daemon configuration.
 

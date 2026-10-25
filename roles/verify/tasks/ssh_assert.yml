@@ -3,6 +3,7 @@
   ansible.builtin.assert:
     that:
       - "'pubkeyauthentication yes' in verify_ssh_admin_settings.stdout_lines"
+      - "'addressfamily ' ~ (ssh_hardening_address_family | default('any')) in verify_ssh_admin_settings.stdout_lines"
       - "'port ' ~ (ansible_port | string) in verify_ssh_admin_settings.stdout_lines"
       - >-
         not (ssh_hardening_disable_root_login | default(false) | bool)

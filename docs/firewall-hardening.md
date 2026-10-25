@@ -13,18 +13,17 @@ firewall_hardening_allowed_inbound:
     proto: tcp
 ```
 
-Crée `inventories/lab/hosts.yml` pour ta VM de test ou remplace ce chemin par
-celui de ton inventaire de test. Un lancement `--tags firewall` saute la
-création du compte : l'administrateur doit déjà exister. Charge aussi
-`admin-vars.yml` pour que le playbook se connecte avec ce compte :
+Configure les règles et approbations dans `hardening-vars.yml`. Le playbook
+charge ce fichier automatiquement. Pour ta VM de test, crée un inventaire
+dédié à partir de `inventories/example/hosts.yml`, puis remplace le chemin
+ci-dessous par le chemin de cet inventaire :
 
 ```bash
-ansible-playbook -i inventories/lab/hosts.yml playbooks/hardening.yml \
-  --tags firewall -e @admin-vars.yml -e @firewall-vars.yml
+ansible-playbook -i inventories/test/hosts.yml playbooks/hardening.yml \
+  --tags firewall
 ```
 
-Ajoute `--ask-vault-pass` seulement si l'un des fichiers passés à `-e` est
-chiffré avec Vault.
+Ajoute `--ask-vault-pass` si `hardening-vars.yml` est chiffré avec Vault.
 
 Pour activer UFW, `firewall_hardening_activate: true` exige aussi une
 approbation du nom d'hôte, une console ou un snapshot, une connexion

@@ -5,3 +5,4 @@
       - fail2ban-client
       - reload
   changed_when: true
+  when: fail2ban_hardening_initial_service.rc == 0

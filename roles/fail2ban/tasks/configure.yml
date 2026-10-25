@@ -27,6 +27,20 @@
 - name: Verify the administrator SSH source before changing Fail2ban
   ansible.builtin.import_tasks: probe_ssh.yml
 
+- name: Validate the automatically observed administrator IPv4 and test address
+  ansible.builtin.import_tasks: validate_addresses.yml
+
+- name: Require explicit network compatibility confirmation for containers
+  ansible.builtin.assert:
+    that:
+      - >-
+        (ansible_facts['virtualization_type'] | default('') | lower)
+        not in ['lxc', 'container', 'openvz', 'docker', 'podman']
+        or fail2ban_hardening_lxc_compatibility_confirmed | bool
+    fail_msg: >-
+      Confirm that the Fail2ban iptables ban action has been validated for this
+      container network before installing or starting Fail2ban.
+
 - name: Check the SSH service supplying journal events
   ansible.builtin.command:
     argv:

@@ -26,6 +26,13 @@ class UsersHardeningGuardsTest(unittest.TestCase):
         environment["ANSIBLE_LOCAL_TEMP"] = str(Path(self.temp.name) / "ansible-tmp")
         environment["ANSIBLE_REMOTE_TEMP"] = str(Path(self.temp.name) / "remote-tmp")
         environment["XDG_CACHE_HOME"] = str(Path(self.temp.name) / "cache")
+        test_variables = {
+            "users_hardening_admin_bootstrapped": False,
+            "users_hardening_admin_username": "",
+            "users_hardening_admin_public_keys": [],
+            "users_hardening_sudo_mode": "nopasswd",
+        }
+        test_variables.update(variables)
         return subprocess.run(
             [
                 "ansible-playbook",
@@ -35,7 +42,7 @@ class UsersHardeningGuardsTest(unittest.TestCase):
                 "--tags",
                 "users",
                 "-e",
-                json.dumps(variables),
+                json.dumps(test_variables),
             ],
             cwd=ROOT,
             env=environment,

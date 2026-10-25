@@ -1,5 +1,5 @@
 ---
-- name: Check the independently observed SSH client address
+- name: Validate the SSH client address observed by the VPS
   ansible.builtin.command:
     argv:
       - /usr/bin/python3
@@ -12,9 +12,17 @@
         if len(fields) != 4:
             sys.exit('SSH_CONNECTION is missing or incomplete')
         observed = ipaddress.ip_address(fields[0])
-        expected = ipaddress.ip_address(sys.argv[2])
-        if observed != expected:
-            sys.exit('administrator SSH source does not match ignoreip')
+        if observed.version != 4:
+            sys.exit('Fail2ban SSH source detection currently requires IPv4')
+        expected_text = sys.argv[2].strip()
+        if expected_text:
+            expected = ipaddress.ip_address(expected_text)
+            if observed != expected:
+                sys.exit('observed administrator SSH source differs from the configured pin')
       - "{{ fail2ban_hardening_ssh_probe.stdout }}"
       - "{{ fail2ban_hardening_admin_source_ip }}"
   changed_when: false
+
+- name: Record the administrator IPv4 observed by the VPS
+  ansible.builtin.set_fact:
+    fail2ban_hardening_effective_admin_source_ip: "{{ fail2ban_hardening_ssh_probe.stdout.split()[0] }}"

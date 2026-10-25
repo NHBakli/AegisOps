@@ -6,6 +6,7 @@
         ssh_hardening_disable_root_login | default(false) | bool
         or ssh_hardening_disable_password_auth | default(false) | bool
         or ssh_hardening_disable_keyboard_interactive | default(false) | bool
+        or (ssh_hardening_address_family | default('any')) != 'any'
       - verify_ssh_admin_user is match('^[a-z_][a-z0-9_-]{0,30}$')
       - verify_ssh_admin_user != 'root'
       - verify_ssh_source_ip | length > 0

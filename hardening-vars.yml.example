@@ -1,0 +1,64 @@
+---
+# Copy this file to hardening-vars.yml and set the values for your host.
+# Keep hardening-vars.yml local; it is ignored by Git.
+
+users_hardening_admin_bootstrapped: false
+users_hardening_admin_username: aegisadmin
+users_hardening_admin_shell: /bin/bash
+users_hardening_admin_groups: []
+users_hardening_admin_public_keys:
+  - "ssh-ed25519 AAAA... replace with your public key"
+users_hardening_sudo_mode: nopasswd
+users_hardening_admin_password_hash: ""
+
+ssh_hardening_disable_root_login: true
+ssh_hardening_disable_password_auth: true
+ssh_hardening_disable_keyboard_interactive: true
+ssh_hardening_address_family: any
+ssh_hardening_approved_host: ""
+ssh_hardening_recovery_confirmed: false
+ssh_hardening_independent_login_confirmed: false
+ssh_hardening_admin_user: aegisadmin
+ssh_hardening_probe_private_key: /absolute/path/to/private/key
+
+firewall_hardening_activate: false
+firewall_hardening_allowed_inbound: []
+firewall_hardening_default_incoming: deny
+firewall_hardening_default_outgoing: allow
+firewall_hardening_approved_host: ""
+firewall_hardening_recovery_confirmed: false
+firewall_hardening_independent_login_confirmed: false
+firewall_hardening_lxc_compatibility_confirmed: false
+firewall_hardening_admin_user: aegisadmin
+firewall_hardening_probe_private_key: /absolute/path/to/private/key
+
+fail2ban_hardening_approved_host: ""
+fail2ban_hardening_recovery_confirmed: false
+fail2ban_hardening_lxc_compatibility_confirmed: false
+fail2ban_hardening_admin_user: aegisadmin
+fail2ban_hardening_probe_private_key: /absolute/path/to/private/key
+# Optional expected IPv4; Fail2ban otherwise discovers it from SSH_CONNECTION.
+fail2ban_hardening_admin_source_ip: ""
+fail2ban_hardening_maxretry: 5
+fail2ban_hardening_findtime: 600
+fail2ban_hardening_bantime: 600
+fail2ban_hardening_banaction: iptables-multiport
+fail2ban_hardening_ban_probe_enabled: false
+fail2ban_hardening_probe_ip: 192.0.2.123
+
+updates_hardening_include_esm: false
+updates_hardening_replace_existing_origins_confirmed: false
+updates_hardening_automatic_reboot: false
+updates_hardening_reboot_time: "03:00"
+updates_hardening_reboot_approved_host: ""
+updates_hardening_recovery_confirmed: false
+
+verify_users: false
+verify_ssh: false
+verify_firewall: false
+verify_fail2ban: false
+verify_updates: false
+verify_ssh_source_ip: ""
+verify_ssh_source_host: ""
+verify_ssh_admin_user: aegisadmin
+verify_ssh_probe_private_key: /absolute/path/to/private/key

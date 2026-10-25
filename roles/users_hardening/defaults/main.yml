@@ -1,5 +1,6 @@
 ---
 users_hardening_admin_username: ""
+users_hardening_admin_bootstrapped: false
 users_hardening_admin_shell: /bin/bash
 users_hardening_admin_groups: []
 users_hardening_admin_public_keys: []
