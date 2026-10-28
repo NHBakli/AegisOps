@@ -1,0 +1,33 @@
+---
+- name: Require a stable Ubuntu 24.04 SSH socket state
+  ansible.builtin.assert:
+    that:
+      - >-
+        ansible_facts['distribution_version'] != '24.04'
+        or ssh_hardening_socket_state.stdout in ['active', 'inactive']
+    fail_msg: >-
+      Review the Ubuntu 24.04 ssh.socket state before changing SSH access.
+
+- name: Reject SSH socket units or drop-ins outside the Ubuntu generator
+  ansible.builtin.assert:
+    that:
+      - >-
+        ssh_hardening_socket_unit.stdout_lines
+        | select('match', '^FragmentPath=/(usr/)?lib/systemd/system/ssh\\.socket$')
+        | list | length == 1
+      - >-
+        ssh_hardening_socket_unit.stdout_lines
+        | select('match', '^DropInPaths=') | list | length == 1
+      - >-
+        ssh_hardening_socket_unit.stdout_lines
+        | select('match', '^DropInPaths=') | first
+        | regex_replace('^DropInPaths=', '') | split(' ')
+        | reject('equalto', '')
+        | reject('match', '^/run/systemd/generator/')
+        | list | length == 0
+    fail_msg: >-
+      A custom ssh.socket unit or override may supersede the Ubuntu generator.
+      Review it before changing SSH access.
+  when:
+    - ansible_facts['distribution_version'] == '24.04'
+    - ssh_hardening_socket_state.stdout == 'active'

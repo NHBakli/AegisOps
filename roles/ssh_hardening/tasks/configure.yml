@@ -8,7 +8,7 @@
   ansible.builtin.assert:
     that:
       - ansible_facts['distribution'] == 'Ubuntu'
-      - ansible_facts['distribution_version'] == '22.04'
+      - ansible_facts['distribution_version'] in ['22.04', '24.04']
       - ssh_hardening_include_directory_path == '/etc/ssh/sshd_config.d'
       - not ansible_check_mode
       - >-
@@ -26,11 +26,41 @@
       - ansible_user == ssh_hardening_admin_user
       - ssh_hardening_probe_private_key is match('^/[^\s]+$')
     fail_msg: >-
-      SSH changes require Ubuntu 22.04, an explicit host approval, confirmed
+      SSH changes require Ubuntu 22.04 or 24.04, an explicit host approval, confirmed
       console recovery, a separately tested non-root administrator session,
       and the administrator's private key path on the controller.
       Check mode cannot verify a candidate SSH configuration and is unsupported
       for this role.
+
+- name: Inspect systemd SSH socket activation on Ubuntu 24.04
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - ssh.socket
+  register: ssh_hardening_socket_state
+  changed_when: false
+  failed_when: false
+  when: ansible_facts['distribution_version'] == '24.04'
+
+- name: Inspect SSH socket unit and overrides on Ubuntu 24.04
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - show
+      - ssh.socket
+      - -p
+      - FragmentPath
+      - -p
+      - DropInPaths
+  register: ssh_hardening_socket_unit
+  changed_when: false
+  when:
+    - ansible_facts['distribution_version'] == '24.04'
+    - ssh_hardening_socket_state.stdout == 'active'
+
+- name: Check SSH socket activation safety
+  ansible.builtin.import_tasks: socket_safety.yml
 
 - name: Confirm the private key exists on the controller
   ansible.builtin.stat:
@@ -92,7 +122,7 @@
         backup: true
         validate: /usr/sbin/sshd -t -f %s
       register: ssh_hardening_configuration
-      notify: Reload validated SSH configuration
+      notify: Apply validated SSH configuration
 
     - name: Read effective global SSH settings from the updated file
       ansible.builtin.command:
@@ -116,6 +146,49 @@
 
     - name: Apply the validated SSH configuration
       ansible.builtin.meta: flush_handlers
+
+    - name: Check the IPv4 listener when ssh.socket owns the port
+      ansible.builtin.command:
+        argv:
+          - ss
+          - -H
+          - -ltn4
+          - sport
+          - '='
+          - ":{{ ansible_port | default(22) }}"
+      register: ssh_hardening_ipv4_listener
+      changed_when: false
+      when:
+        - ansible_facts['distribution_version'] == '24.04'
+        - ssh_hardening_socket_state.stdout == 'active'
+        - ssh_hardening_address_family == 'inet'
+
+    - name: Check the IPv6 listener when ssh.socket owns the port
+      ansible.builtin.command:
+        argv:
+          - ss
+          - -H
+          - -ltn6
+          - sport
+          - '='
+          - ":{{ ansible_port | default(22) }}"
+      register: ssh_hardening_ipv6_listener
+      changed_when: false
+      when:
+        - ansible_facts['distribution_version'] == '24.04'
+        - ssh_hardening_socket_state.stdout == 'active'
+        - ssh_hardening_address_family == 'inet'
+
+    - name: Require an IPv4-only listener when requested
+      ansible.builtin.assert:
+        that:
+          - ssh_hardening_ipv4_listener.stdout_lines | length > 0
+          - ssh_hardening_ipv6_listener.stdout_lines | length == 0
+        fail_msg: The active SSH socket does not match AddressFamily inet.
+      when:
+        - ansible_facts['distribution_version'] == '24.04'
+        - ssh_hardening_socket_state.stdout == 'active'
+        - ssh_hardening_address_family == 'inet'
 
     - name: Probe a fresh administrator SSH connection after reload
       ansible.builtin.command:
@@ -141,6 +214,23 @@
         mode: preserve
         validate: /usr/sbin/sshd -t -f %s
       when: ssh_hardening_configuration.backup_file is defined
+
+    - name: Regenerate SSH socket unit after restoring the previous configuration
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+      when:
+        - ssh_hardening_configuration.backup_file is defined
+        - ansible_facts['distribution_version'] == '24.04'
+        - ssh_hardening_socket_state.stdout == 'active'
+
+    - name: Restore the previous SSH socket listener
+      ansible.builtin.systemd_service:
+        name: ssh.socket
+        state: restarted
+      when:
+        - ssh_hardening_configuration.backup_file is defined
+        - ansible_facts['distribution_version'] == '24.04'
+        - ssh_hardening_socket_state.stdout == 'active'
 
     - name: Reload SSH after restoring the previous configuration
       ansible.builtin.service:

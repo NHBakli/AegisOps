@@ -1,0 +1,12 @@
+---
+- name: Test UFW package removal preflight with an APT plan fixture
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    firewall_hardening_apt_plan:
+      rc: "{{ fixture_apt_rc | int }}"
+      stdout_lines: "{{ fixture_apt_lines }}"
+  tasks:
+    - name: Check the real UFW package removal guard
+      ansible.builtin.import_tasks: ../../roles/firewall_hardening/tasks/install_safety.yml

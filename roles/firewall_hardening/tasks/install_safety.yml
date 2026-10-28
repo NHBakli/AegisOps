@@ -1,0 +1,11 @@
+---
+- name: Assert UFW installation does not remove packages
+  ansible.builtin.assert:
+    that:
+      - firewall_hardening_apt_plan.rc | int == 0
+      - >-
+        firewall_hardening_apt_plan.stdout_lines
+        | select('match', '^Remv\\s+') | list | length == 0
+    fail_msg: >-
+      Installing UFW would remove existing packages or APT could not simulate
+      the change. Review the package conflict before preparing the firewall.

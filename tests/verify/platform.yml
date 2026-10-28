@@ -1,0 +1,8 @@
+---
+- name: Test verification platform guard with supplied facts
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Check the real verification platform guard
+      ansible.builtin.import_tasks: ../../roles/verify/tasks/platform.yml

@@ -3,14 +3,7 @@
   ansible.builtin.import_tasks: platform_facts.yml
 
 - name: Require supported platform before preparing UFW
-  ansible.builtin.assert:
-    that:
-      - ansible_facts['distribution'] == 'Ubuntu'
-      - ansible_facts['distribution_version'] == '22.04'
-      - not ansible_check_mode
-    fail_msg: >-
-      UFW preparation currently supports only Ubuntu 22.04. Check mode cannot
-      verify staged UFW rules; use an isolated test host instead.
+  ansible.builtin.import_tasks: platform_support.yml
 
 - name: Validate firewall rule input before changing the host
   ansible.builtin.import_tasks: validate_rules.yml
@@ -33,6 +26,30 @@
   register: firewall_hardening_package_status
   changed_when: false
   failed_when: false
+
+- name: Simulate UFW installation before changing packages
+  ansible.builtin.command:
+    argv:
+      - apt-get
+      - -s
+      - -o
+      - Debug::NoLocking=1
+      - install
+      - ufw
+  register: firewall_hardening_apt_plan
+  changed_when: false
+  failed_when: false
+  environment:
+    LC_ALL: C
+  when: >-
+    firewall_hardening_package_status.rc != 0
+    or 'install ok installed' not in firewall_hardening_package_status.stdout
+
+- name: Refuse a UFW installation that removes existing packages
+  ansible.builtin.import_tasks: install_safety.yml
+  when: >-
+    firewall_hardening_package_status.rc != 0
+    or 'install ok installed' not in firewall_hardening_package_status.stdout
 
 - name: Read existing UFW state if installed
   ansible.builtin.command:

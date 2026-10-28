@@ -50,6 +50,24 @@ class UpdatesHardeningTest(unittest.TestCase):
             self.assertIn("host-specific approval", result.stdout)
             self.assertIn("changed=0", result.stdout)
 
+    def test_platform_guard_accepts_supported_ubuntu_releases_only(self):
+        for version, accepted in (("22.04", True), ("24.04", True), ("20.04", False)):
+            with self.subTest(version=version):
+                with tempfile.TemporaryDirectory(prefix="aegisops-updates-") as temp:
+                    result = self.run_playbook(
+                        "tests/updates/preflight.yml",
+                        {
+                            "fixture_distribution_version": version,
+                            "updates_hardening_include_esm": False,
+                            "updates_hardening_automatic_reboot": False,
+                            "updates_hardening_reboot_time": "03:00",
+                        },
+                        temp,
+                    )
+                    self.assertEqual(
+                        result.returncode == 0, accepted, result.stdout + result.stderr
+                    )
+
     def test_custom_origins_require_review_before_replacement(self):
         base = {
             "fixture_existing_lines": [

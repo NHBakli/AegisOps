@@ -1,0 +1,15 @@
+---
+- name: Test SSH IPv4 listener guard with a proc fixture
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_port: 22
+  tasks:
+    - name: Supply IPv6 socket table fixture
+      ansible.builtin.set_fact:
+        verify_ssh_tcp6:
+          content: "{{ fixture_tcp6 | b64encode }}"
+
+    - name: Check the real SSH IPv4 listener guard
+      ansible.builtin.import_tasks: ../../roles/verify/tasks/ssh_ipv4_scope.yml

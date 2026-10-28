@@ -1,7 +1,10 @@
 # Vérifier le durcissement
 
-`verify.yml` lit l'état réel de l'hôte et ne modifie rien. Choisis les
-contrôles dans `hardening-vars.yml`, que le playbook charge automatiquement :
+`verify.yml` lit l'état réel de l'hôte et ne modifie rien. La vérification
+accepte Ubuntu 22.04 et 24.04. Si la politique SSH impose
+`AddressFamily inet`, elle contrôle aussi qu'aucun socket SSH IPv6 ne reste
+à l'écoute. Choisis les contrôles dans `hardening-vars.yml`, que le playbook
+charge automatiquement :
 
 ```bash
 ansible-playbook -i inventories/production/hosts.local.yml playbooks/verify.yml

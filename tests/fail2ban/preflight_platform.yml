@@ -1,0 +1,24 @@
+---
+- name: Exercise the Fail2ban platform and approval guard without host changes
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_facts:
+      distribution: Ubuntu
+      distribution_version: "{{ fixture_distribution_version }}"
+      virtualization_type: lxc
+    ansible_user: aegisadmin
+    ansible_port: 22
+    fail2ban_hardening_approved_host: localhost
+    fail2ban_hardening_recovery_confirmed: true
+    fail2ban_hardening_admin_source_ip: ""
+    fail2ban_hardening_admin_user: aegisadmin
+    fail2ban_hardening_probe_private_key: /tmp/nonexistent-test-key
+    fail2ban_hardening_maxretry: 5
+    fail2ban_hardening_findtime: 600
+    fail2ban_hardening_bantime: 600
+    fail2ban_hardening_banaction: iptables-multiport
+  tasks:
+    - name: Import the real Fail2ban platform and input guard
+      ansible.builtin.import_tasks: ../../roles/fail2ban/tasks/preflight_inputs.yml

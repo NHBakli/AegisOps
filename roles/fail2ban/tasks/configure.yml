@@ -41,14 +41,21 @@
       Confirm that the Fail2ban iptables ban action has been validated for this
       container network before installing or starting Fail2ban.
 
-- name: Check the SSH service supplying journal events
+- name: Check the SSH service or socket supplying journal events
   ansible.builtin.command:
     argv:
       - systemctl
       - is-active
-      - ssh
-  register: fail2ban_hardening_ssh_service
+      - "{{ item }}"
+  loop:
+    - ssh.service
+    - ssh.socket
+  register: fail2ban_hardening_ssh_units
   changed_when: false
+  failed_when: false
+
+- name: Require an active SSH service or socket
+  ansible.builtin.import_tasks: verify_ssh_units.yml
 
 - name: Check the SSH journal is accessible
   ansible.builtin.command:

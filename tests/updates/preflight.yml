@@ -6,7 +6,7 @@
   vars:
     ansible_facts:
       distribution: Ubuntu
-      distribution_version: "22.04"
+      distribution_version: "{{ fixture_distribution_version | default('22.04') }}"
   tasks:
     - name: Run the real update policy preflight
       ansible.builtin.import_tasks: ../../roles/updates_hardening/tasks/preflight.yml

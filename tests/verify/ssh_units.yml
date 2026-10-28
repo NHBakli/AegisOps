@@ -1,0 +1,13 @@
+---
+- name: Test SSH unit state guard with supplied states
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    verify_ssh_units:
+      results:
+        - stdout: "{{ fixture_ssh_service_state }}"
+        - stdout: "{{ fixture_ssh_socket_state }}"
+  tasks:
+    - name: Check the real SSH unit guard
+      ansible.builtin.import_tasks: ../../roles/verify/tasks/ssh_units.yml

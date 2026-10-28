@@ -1,0 +1,14 @@
+---
+- name: Verify UFW platform support without touching the firewall
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Provide a controlled platform fixture
+      ansible.builtin.set_fact:
+        ansible_facts:
+          distribution: "{{ fixture_distribution }}"
+          distribution_version: "{{ fixture_distribution_version }}"
+
+    - name: Apply the production platform guard
+      ansible.builtin.import_tasks: ../../roles/firewall_hardening/tasks/platform_support.yml

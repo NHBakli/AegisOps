@@ -1,0 +1,6 @@
+---
+- name: Assert an active SSH service or socket
+  ansible.builtin.assert:
+    that:
+      - "'active' in (verify_ssh_units.results | map(attribute='stdout') | list)"
+    fail_msg: Neither ssh.service nor ssh.socket is active.

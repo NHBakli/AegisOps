@@ -14,7 +14,8 @@ ansible-playbook -i inventories/production/hosts.local.yml playbooks/hardening.y
 
 Ajoute `--ask-vault-pass` si `hardening-vars.yml` est chiffré avec Vault.
 
-Par défaut, seules les mises à jour `jammy-security` sont configurées. Si APT
+Par défaut, seules les mises à jour de sécurité de la version détectée sont
+configurées (`jammy-security` sur 22.04, `noble-security` sur 24.04). Si APT
 contient des origines personnalisées, le rôle s'arrête. Après revue, leur
 remplacement dans la politique effective demande
 `updates_hardening_replace_existing_origins_confirmed: true`. ESM peut être
@@ -26,6 +27,6 @@ avec `updates_hardening_reboot_approved_host` et confirmer l'accès console via
 `updates_hardening_recovery_confirmed: true`. N'active cette option qu'avec une
 fenêtre de maintenance prévue.
 
-Le rôle cible Ubuntu 22.04. Même sans redémarrage automatique, des mises à jour
-peuvent redémarrer certains services. Sous LXC, les mises à jour du noyau et le
-redémarrage du conteneur dépendent aussi de l'hôte Proxmox.
+Le rôle cible Ubuntu 22.04 et 24.04. Même sans redémarrage automatique, des
+mises à jour peuvent redémarrer certains services. Sous LXC, les mises à jour
+du noyau et le redémarrage du conteneur dépendent aussi de l'hôte Proxmox.

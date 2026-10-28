@@ -43,6 +43,43 @@ class FirewallGuardsTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("changed=0", result.stdout)
 
+    def test_platform_guard_accepts_only_validated_ubuntu_releases(self):
+        for distribution, version, expected_success in (
+            ("Ubuntu", "22.04", True),
+            ("Ubuntu", "24.04", True),
+            ("Ubuntu", "24.10", False),
+            ("Debian", "12", False),
+        ):
+            with self.subTest(distribution=distribution, version=version):
+                result = self.run_playbook(
+                    "tests/firewall/platform_support.yml",
+                    {
+                        "fixture_distribution": distribution,
+                        "fixture_distribution_version": version,
+                    },
+                )
+                self.assertEqual(
+                    result.returncode == 0,
+                    expected_success,
+                    result.stdout + result.stderr,
+                )
+                self.assertIn("changed=0", result.stdout)
+
+    def test_ufw_installation_refuses_package_removal(self):
+        for rc, lines, expected_success in (
+            (0, ["Inst ufw", "Conf ufw"], True),
+            (0, ["Remv netfilter-persistent", "Inst ufw"], False),
+            (100, ["E: package conflict"], False),
+        ):
+            with self.subTest(rc=rc, lines=lines):
+                result = self.run_playbook(
+                    "tests/firewall/install_safety.yml",
+                    {"fixture_apt_rc": rc, "fixture_apt_lines": lines},
+                )
+                self.assertEqual(result.returncode == 0, expected_success,
+                                 result.stdout + result.stderr)
+                self.assertIn("changed=0", result.stdout)
+
     def test_rules_reject_duplicates_ssh_conflicts_and_unsafe_defaults(self):
         cases = {
             "valid": ({"firewall_hardening_allowed_inbound": [

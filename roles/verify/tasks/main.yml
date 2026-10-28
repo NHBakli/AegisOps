@@ -11,11 +11,7 @@
   tags: always
 
 - name: Require the Ubuntu version validated for AegisOps verification
-  ansible.builtin.assert:
-    that:
-      - ansible_facts['distribution'] == 'Ubuntu'
-      - ansible_facts['distribution_version'] == '22.04'
-    fail_msg: Verification currently supports only Ubuntu 22.04.
+  ansible.builtin.import_tasks: platform.yml
 
 - name: Verify administrator account and credentials
   ansible.builtin.import_tasks: users.yml

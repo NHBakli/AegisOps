@@ -31,3 +31,20 @@ Si la sauvegarde manque ou si le serveur reste inaccessible, restaure le
 snapshot ou demande l'accès console au fournisseur. Sous LXC, vérifie aussi
 le filtrage réseau côté Proxmox. Une règle locale correcte ne garantit pas
 l'accès depuis Internet.
+
+## Ubuntu 24.04 avec activation par socket
+
+Si `systemctl is-active ssh.socket` répond `active`, Ubuntu 24.04 peut tirer
+les paramètres d'écoute de `sshd_config` via un générateur systemd. Après
+avoir restauré le fichier et obtenu un `sshd -t` valide, exécute depuis la
+console ou une session encore ouverte :
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl restart ssh.socket
+sudo systemctl reload ssh.service
+sudo systemctl status ssh.socket ssh.service --no-pager
+```
+
+Teste ensuite une nouvelle connexion indépendante. Ne ferme pas la session
+de récupération avant ce test.

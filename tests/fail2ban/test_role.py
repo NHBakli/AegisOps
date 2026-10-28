@@ -20,15 +20,16 @@ class Fail2banLocalTest(unittest.TestCase):
             environment["ANSIBLE_REMOTE_TEMP"] = str(Path(temp) / "remote")
             environment["XDG_CACHE_HOME"] = str(Path(temp) / "cache")
             dest = Path(temp) / "jail.local"
+            command = [
+                "ansible-playbook",
+                "-i",
+                "localhost,",
+                f"tests/fail2ban/{playbook}",
+                "-e",
+                json.dumps({**variables, "fixture_dest": str(dest)}),
+            ]
             result = subprocess.run(
-                [
-                    "ansible-playbook",
-                    "-i",
-                    "localhost,",
-                    f"tests/fail2ban/{playbook}",
-                    "-e",
-                    json.dumps({**variables, "fixture_dest": str(dest)}),
-                ],
+                command,
                 cwd=ROOT,
                 env=environment,
                 capture_output=True,
@@ -42,7 +43,36 @@ class Fail2banLocalTest(unittest.TestCase):
         result, _ = self.run_fixture("preflight_role.yml", {})
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("changed=0", result.stdout)
-        self.assertIn("Fail2ban requires Ubuntu 22.04", result.stdout)
+        self.assertIn("Fail2ban requires Ubuntu 22.04 or 24.04", result.stdout)
+
+    def test_platform_guard_accepts_supported_ubuntu_releases_only(self):
+        for version, accepted in (("22.04", True), ("24.04", True), ("20.04", False)):
+            with self.subTest(version=version):
+                result, _ = self.run_fixture(
+                    "preflight_platform.yml",
+                    {"fixture_distribution_version": version},
+                )
+                self.assertEqual(
+                    result.returncode == 0, accepted, result.stdout + result.stderr
+                )
+
+    def test_ssh_journal_source_can_be_service_or_socket(self):
+        for service, socket, accepted in (
+            ("active", "inactive", True),
+            ("inactive", "active", True),
+            ("inactive", "inactive", False),
+        ):
+            with self.subTest(service=service, socket=socket):
+                result, _ = self.run_fixture(
+                    "verify_ssh_units.yml",
+                    {
+                        "fixture_ssh_service_state": service,
+                        "fixture_ssh_socket_state": socket,
+                    },
+                )
+                self.assertEqual(
+                    result.returncode == 0, accepted, result.stdout + result.stderr
+                )
 
     def test_jail_uses_ssh_journal_and_explicit_admin_exception(self):
         result, contents = self.run_fixture("render.yml", {})

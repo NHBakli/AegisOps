@@ -31,7 +31,7 @@ class SSHHardeningGuardsTest(unittest.TestCase):
                 check=False,
             )
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("SSH changes require Ubuntu 22.04", result.stdout)
+            self.assertIn("SSH changes require Ubuntu 22.04 or 24.04", result.stdout)
             self.assertIn("changed=0", result.stdout)
 
     def test_match_and_nonstandard_include_are_rejected(self):
@@ -113,6 +113,46 @@ class SSHHardeningGuardsTest(unittest.TestCase):
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("symlinked SSH include path", result.stdout)
+
+    def test_socket_activation_preflight(self):
+        cases = {
+            "jammy": ("22.04", "", "", True),
+            "noble_socket": ("24.04", "active", "FragmentPath=/usr/lib/systemd/system/ssh.socket\nDropInPaths=/run/systemd/generator/ssh.socket.d/addresses.conf", True),
+            "noble_service": ("24.04", "inactive", "", True),
+            "noble_unknown_state": ("24.04", "failed", "", False),
+            "noble_custom_socket": ("24.04", "active", "FragmentPath=/etc/systemd/system/ssh.socket", False),
+            "noble_custom_dropin": ("24.04", "active", "DropInPaths=/etc/systemd/system/ssh.socket.d/custom.conf", False),
+            "noble_runtime_dropin": ("24.04", "active", "FragmentPath=/usr/lib/systemd/system/ssh.socket\nDropInPaths=/run/systemd/system/ssh.socket.d/custom.conf", False),
+            "noble_local_unit": ("24.04", "active", "FragmentPath=/usr/local/lib/systemd/system/ssh.socket\nDropInPaths=", False),
+        }
+        for name, (version, state, unit, expected_success) in cases.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory(prefix="aegisops-ssh-socket-") as temp:
+                environment = os.environ.copy()
+                environment["ANSIBLE_LOCAL_TEMP"] = str(Path(temp) / "ansible-tmp")
+                environment["ANSIBLE_REMOTE_TEMP"] = str(Path(temp) / "remote-tmp")
+                environment["XDG_CACHE_HOME"] = str(Path(temp) / "cache")
+                result = subprocess.run(
+                    [
+                        "ansible-playbook",
+                        "-i",
+                        "localhost,",
+                        "tests/ssh/socket_safety.yml",
+                        "-e",
+                        json.dumps(
+                            {
+                                "fixture_distribution_version": version,
+                                "fixture_socket_state": state,
+                                "fixture_socket_unit": unit,
+                            }
+                        ),
+                    ],
+                    cwd=ROOT,
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                self.assertEqual(result.returncode == 0, expected_success, result.stdout + result.stderr)
 
 
 if __name__ == "__main__":

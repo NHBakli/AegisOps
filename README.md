@@ -1,8 +1,9 @@
 # AegisOps
 
-Ansible pour auditer, durcir et vérifier des serveurs Ubuntu. La cible
-actuelle est Ubuntu 22.04 sous LXC. UFW est préparé mais reste inactif par
-défaut ; son activation dépend des capacités réseau disponibles dans LXC.
+Ansible pour auditer, durcir et vérifier des serveurs Ubuntu 22.04 et 24.04.
+La cible actuelle est Ubuntu 24.04 sous LXC. UFW est préparé mais reste
+inactif par défaut ; son activation dépend des capacités réseau disponibles
+dans LXC.
 Le projet est distribué sous licence [MIT](LICENSE).
 
 ## Cible
@@ -131,7 +132,8 @@ python3 -m unittest discover -s tests -p 'test_*.py'
 
 Si Ansible affiche que `community.general 13.0.1` ne supporte pas Core 2.16,
 la commande Galaxy ci-dessus installe la version 8.3.0 épinglée par le projet.
-Les tests locaux ne remplacent pas un essai sur Ubuntu 22.04 isolé.
+Les tests locaux ne remplacent pas un essai isolé sur chaque version d'Ubuntu,
+en particulier pour SSH avec `ssh.socket` sur 24.04 et pour le filtrage LXC.
 
 Voir [docs/users-hardening.md](docs/users-hardening.md),
 [docs/verify.md](docs/verify.md) et les guides spécialisés dans `docs/`.

@@ -113,17 +113,28 @@
 - name: Require the requested effective SSH settings
   ansible.builtin.import_tasks: ssh_assert.yml
 
-- name: Read the running SSH service state
-  ansible.builtin.command:
-    argv: [systemctl, is-active, ssh]
-  register: verify_ssh_service
-  changed_when: false
+- name: Read IPv6 TCP listeners when SSH should be IPv4 only
+  ansible.builtin.slurp:
+    src: /proc/net/tcp6
+  register: verify_ssh_tcp6
+  when: (ssh_hardening_address_family | default('any')) == 'inet'
 
-- name: Require the SSH service to be active
-  ansible.builtin.assert:
-    that:
-      - verify_ssh_service.stdout | trim == 'active'
-    fail_msg: The SSH service is not active.
+- name: Require the SSH port not to listen on IPv6
+  ansible.builtin.import_tasks: ssh_ipv4_scope.yml
+  when: (ssh_hardening_address_family | default('any')) == 'inet'
+
+- name: Read the running SSH service and socket states
+  ansible.builtin.command:
+    argv: [systemctl, is-active, "{{ item }}"]
+  loop:
+    - ssh.service
+    - ssh.socket
+  register: verify_ssh_units
+  changed_when: false
+  failed_when: false
+
+- name: Require an active SSH service or socket
+  ansible.builtin.import_tasks: ssh_units.yml
 
 - name: Probe a fresh administrator SSH and sudo session from the controller
   ansible.builtin.command:

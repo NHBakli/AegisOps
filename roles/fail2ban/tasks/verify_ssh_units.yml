@@ -1,0 +1,6 @@
+---
+- name: Assert an active SSH service or socket supplies journal events
+  ansible.builtin.assert:
+    that:
+      - "'active' in (fail2ban_hardening_ssh_units.results | map(attribute='stdout') | list)"
+    fail_msg: Neither ssh.service nor ssh.socket is active for the SSH jail.

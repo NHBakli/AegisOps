@@ -1,0 +1,32 @@
+---
+- name: Assert Fail2ban platform and administrator prerequisites
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution'] == 'Ubuntu'
+      - ansible_facts['distribution_version'] in ['22.04', '24.04']
+      - not ansible_check_mode
+      - fail2ban_hardening_approved_host == inventory_hostname
+      - fail2ban_hardening_recovery_confirmed | bool
+      - fail2ban_hardening_admin_source_ip is string
+      - fail2ban_hardening_admin_user is match('^[a-z_][a-z0-9_-]{0,30}$')
+      - fail2ban_hardening_admin_user != 'root'
+      - ansible_user is defined
+      - ansible_user == fail2ban_hardening_admin_user
+      - fail2ban_hardening_probe_private_key is match('^/[^\\s]+$')
+      - fail2ban_hardening_maxretry is integer
+      - fail2ban_hardening_maxretry >= 1
+      - fail2ban_hardening_findtime is integer
+      - fail2ban_hardening_findtime >= 1
+      - fail2ban_hardening_bantime is integer
+      - fail2ban_hardening_bantime >= 1
+      - fail2ban_hardening_banaction == 'iptables-multiport'
+      - ansible_port is defined
+      - (ansible_port | default('') | string) is match('^[0-9]+$')
+      - (ansible_port | default(0) | int) >= 1
+      - (ansible_port | default(0) | int) <= 65535
+      - ansible_facts['virtualization_type'] is defined
+    fail_msg: >-
+      Fail2ban requires Ubuntu 22.04 or 24.04, host-specific approval, console recovery,
+      a tested non-root administrator with its SSH key and source IP, safe jail
+      values, and separate LXC compatibility confirmation. Check mode is
+      unsupported when enabled.

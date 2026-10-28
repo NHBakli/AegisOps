@@ -1,0 +1,13 @@
+---
+- name: Exercise SSH service and socket compatibility without system changes
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    fail2ban_hardening_ssh_units:
+      results:
+        - stdout: "{{ fixture_ssh_service_state }}"
+        - stdout: "{{ fixture_ssh_socket_state }}"
+  tasks:
+    - name: Run the real SSH unit assertion
+      ansible.builtin.import_tasks: ../../roles/fail2ban/tasks/verify_ssh_units.yml

@@ -1,5 +1,23 @@
 ---
+- name: Regenerate Ubuntu 24.04 SSH socket unit
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+  when:
+    - ansible_facts['distribution_version'] == '24.04'
+    - ssh_hardening_socket_state.stdout == 'active'
+  listen: Apply validated SSH configuration
+
+- name: Restart Ubuntu 24.04 SSH socket listener
+  ansible.builtin.systemd_service:
+    name: ssh.socket
+    state: restarted
+  when:
+    - ansible_facts['distribution_version'] == '24.04'
+    - ssh_hardening_socket_state.stdout == 'active'
+  listen: Apply validated SSH configuration
+
 - name: Reload validated SSH configuration
   ansible.builtin.service:
     name: ssh
     state: reloaded
+  listen: Apply validated SSH configuration

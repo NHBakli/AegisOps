@@ -2,7 +2,10 @@
 
 Le tag `firewall` prépare UFW, mais ne l'active pas. Il autorise d'abord le
 port SSH indiqué par `ansible_port`, puis les ports déclarés dans
-`firewall_hardening_allowed_inbound`. Ubuntu 22.04 seulement.
+`firewall_hardening_allowed_inbound`. Les gardes de plateforme acceptent
+Ubuntu 22.04 et 24.04.
+Si UFW manque, le rôle simule son installation et refuse toute suppression de
+paquet prévue par APT avant de modifier l'hôte.
 
 Exemple de variables :
 

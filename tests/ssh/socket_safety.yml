@@ -1,0 +1,16 @@
+---
+- name: Exercise SSH socket preflight locally
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_facts:
+      distribution_version: "{{ fixture_distribution_version }}"
+    ssh_hardening_socket_state:
+      stdout: "{{ fixture_socket_state }}"
+    ssh_hardening_socket_unit:
+      stdout: "{{ fixture_socket_unit }}"
+      stdout_lines: "{{ fixture_socket_unit.splitlines() }}"
+  tasks:
+    - name: Apply real SSH socket preflight
+      ansible.builtin.import_tasks: ../../roles/ssh_hardening/tasks/socket_safety.yml

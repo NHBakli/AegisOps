@@ -46,6 +46,19 @@ class VerifyTest(unittest.TestCase):
                          result.stdout + result.stderr)
         self.assertIn("changed=0", result.stdout)
 
+    def test_platform_guard_accepts_supported_ubuntu_releases_only(self):
+        for version, expected_success in (("22.04", True), ("24.04", True),
+                                          ("20.04", False)):
+            with self.subTest(version=version):
+                result = self.run_playbook(
+                    "tests/verify/platform.yml",
+                    {"ansible_facts": {"distribution": "Ubuntu",
+                                       "distribution_version": version}},
+                )
+                self.assertEqual(result.returncode == 0, expected_success,
+                                 result.stdout + result.stderr)
+                self.assertIn("changed=0", result.stdout)
+
     def test_empty_verification_refuses_to_claim_success(self):
         result = self.run_playbook("playbooks/verify.yml", {})
         self.assertNotEqual(result.returncode, 0)
@@ -118,6 +131,33 @@ class VerifyTest(unittest.TestCase):
         )
         self.assertNotEqual(rejected.returncode, 0)
         self.assertIn("IPv4-only ban probe is insufficient", rejected.stdout)
+
+    def test_ipv4_ssh_policy_rejects_a_live_ipv6_listener(self):
+        header = "sl  local_address rem_address st\n"
+        line = "0: 00000000000000000000000000000000:{port} 00000000000000000000000000000000:0000 0A\n"
+        for port, expected_success in (("0050", True), ("0016", False)):
+            with self.subTest(port=port):
+                result = self.run_playbook(
+                    "tests/verify/ssh_ipv4_scope.yml",
+                    {"fixture_tcp6": header + line.format(port=port)},
+                )
+                self.assertEqual(result.returncode == 0, expected_success,
+                                 result.stdout + result.stderr)
+                self.assertIn("changed=0", result.stdout)
+
+    def test_ssh_verification_accepts_service_or_socket_activation(self):
+        for service, socket, expected_success in (
+            ("active", "inactive", True), ("inactive", "active", True),
+            ("inactive", "inactive", False),
+        ):
+            with self.subTest(service=service, socket=socket):
+                result = self.run_playbook(
+                    "tests/verify/ssh_units.yml",
+                    {"fixture_ssh_service_state": service,
+                     "fixture_ssh_socket_state": socket},
+                )
+                self.assertEqual(result.returncode == 0, expected_success,
+                                 result.stdout + result.stderr)
 
     def test_updates_rejects_nonsecurity_origin(self):
         lines = [

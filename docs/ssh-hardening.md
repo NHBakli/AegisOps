@@ -2,11 +2,17 @@
 
 ## Avant de lancer
 
-Prévu pour Ubuntu 22.04. Le rôle bloque root, les mots de passe et
+Prévu pour Ubuntu 22.04 et 24.04. Le rôle bloque root, les mots de passe et
 l'authentification interactive. `ssh_hardening_address_family: inet` limite
 seulement SSH à IPv4 ; IPv6 reste actif au niveau du système. Le rôle exige un
 administrateur non-root, une console ou un snapshot, et une clé SSH disponible
 sur le contrôleur.
+
+Sur Ubuntu 24.04, OpenSSH peut écouter via `ssh.socket`. Le rôle vérifie ce
+mode, régénère la configuration systemd après un changement d'adresse et
+contrôle les ports réellement à l'écoute avant de tester une nouvelle
+connexion. Un échec déclenche la restauration de la configuration sauvegardée.
+L'accès console reste indispensable si la connexion tombe pendant cette étape.
 
 Configure dans `hardening-vars.yml` :
 

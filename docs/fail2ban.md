@@ -1,7 +1,9 @@
 # Fail2ban
 
 Lance ce rôle seul avec `--tags fail2ban`. Il configure une jail SSH qui lit le
-journal systemd et ignore l'adresse source réelle de l'administrateur.
+journal systemd et ignore l'adresse source réelle de l'administrateur. Le
+garde de plateforme accepte Ubuntu 22.04 et 24.04 ; sur 24.04, le rôle
+reconnaît aussi `ssh.socket` comme point d'entrée SSH actif.
 
 Configure les valeurs ci-dessous dans `hardening-vars.yml`. Le playbook
 charge automatiquement ce fichier. Vérifie que `sudo -n true` fonctionne et

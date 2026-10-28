@@ -3,7 +3,7 @@
   ansible.builtin.assert:
     that:
       - ansible_facts['distribution'] == 'Ubuntu'
-      - ansible_facts['distribution_version'] == '22.04'
+      - ansible_facts['distribution_version'] in ['22.04', '24.04']
       - not ansible_check_mode
       - updates_hardening_include_esm is boolean
       - updates_hardening_automatic_reboot is boolean
@@ -15,5 +15,5 @@
           and updates_hardening_recovery_confirmed | bool
         )
     fail_msg: >-
-      Automatic updates require Ubuntu 22.04 and a valid policy. Automatic
+      Automatic updates require Ubuntu 22.04 or 24.04 and a valid policy. Automatic
       reboot also requires host-specific approval and confirmed recovery.
