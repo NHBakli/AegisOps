@@ -97,6 +97,12 @@ class VerifyTest(unittest.TestCase):
                              base + "22/tcp  ALLOW IN  Anywhere\n"}, True)
         self.assert_fixture({"fixture_kind": "firewall", "fixture_ufw_output":
                              base + "80/tcp  ALLOW IN  Anywhere\n"}, False)
+        # VPN rules are checked by verify_wireguard and verify_monitoring.
+        self.assert_fixture({"fixture_kind": "firewall", "fixture_ufw_output":
+                             base + "22/tcp  ALLOW IN  Anywhere\n"
+                             + "51820/udp  ALLOW IN  Anywhere  # AegisOps WireGuard\n"
+                             + "10.66.66.1 3000/tcp on wg0  ALLOW IN  Anywhere"
+                             + "  # AegisOps Grafana via VPN\n"}, True)
         self.assert_fixture({"fixture_kind": "firewall", "fixture_ufw_output":
                              base + "22/tcp  ALLOW IN  Anywhere\n"
                              + "3306/tcp  ALLOW IN  Anywhere\n"}, False)

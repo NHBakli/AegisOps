@@ -1,0 +1,17 @@
+# Managed by AegisOps. Read-only collection of Fail2ban, UFW and SSH state.
+[Unit]
+Description=AegisOps security metrics for node_exporter
+After=fail2ban.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 -I {{ monitoring_collector_path }} --output {{ monitoring_textfile_directory }}/aegisops.prom --max-banned-ips {{ monitoring_collector_max_banned_ips }}
+Nice=10
+MemoryMax=64M
+TimeoutStartSec=120
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+# full (not strict): ufw may need /run/xtables.lock and fail2ban its socket.
+ProtectSystem=full
+ProtectKernelModules=true

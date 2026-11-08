@@ -1,0 +1,53 @@
+---
+# Listeners are deliberately pinned to loopback and are not role defaults:
+# access is through an SSH tunnel, so no firewall rule is ever opened.
+monitoring_listen_address: 127.0.0.1
+monitoring_ports:
+  prometheus: 9090
+  node_exporter: 9100
+  grafana: 3000
+
+# Grafana's own address and the only host name it answers to (DNS rebinding
+# protection). Prometheus and node_exporter always stay on loopback.
+monitoring_grafana_address: >-
+  {{ wireguard_server_address if monitoring_grafana_access == 'vpn' else monitoring_listen_address }}
+monitoring_grafana_domain: >-
+  {{ wireguard_server_address if monitoring_grafana_access == 'vpn' else 'localhost' }}
+# Exact address:port pairs allowed to listen; anything else fails verification.
+monitoring_allowed_listeners:
+  - "{{ monitoring_listen_address }}:{{ monitoring_ports.prometheus }}"
+  - "{{ monitoring_listen_address }}:{{ monitoring_ports.node_exporter }}"
+  - "{{ monitoring_grafana_address }}:{{ monitoring_ports.grafana }}"
+
+monitoring_textfile_directory: /var/lib/prometheus/node-exporter
+monitoring_collector_path: /usr/local/sbin/aegisops-security-exporter
+monitoring_grafana_env_file: /etc/aegisops/grafana.env
+monitoring_grafana_dashboard_directory: /var/lib/grafana/dashboards/aegisops
+monitoring_grafana_keyring: /etc/apt/keyrings/grafana.asc
+monitoring_grafana_key_fingerprint: B53AE77BADB630A683046005963FA27710458545
+
+monitoring_packages:
+  - dbus
+  - prometheus
+  - prometheus-node-exporter
+  - prometheus-node-exporter-collectors
+  - grafana
+
+# Hardware collectors shipped by prometheus-node-exporter-collectors that are
+# useless on a VPS (virtual disks, no IPMI) and would only consume resources.
+monitoring_disabled_collector_timers:
+  - prometheus-node-exporter-ipmitool-sensor.timer
+  - prometheus-node-exporter-mellanox-hca-temp.timer
+  - prometheus-node-exporter-nvme.timer
+  - prometheus-node-exporter-smartmon.timer
+
+monitoring_systemd_units:
+  - ssh.service
+  - ssh.socket
+  - fail2ban.service
+  - ufw.service
+  - unattended-upgrades.service
+  - prometheus.service
+  - prometheus-node-exporter.service
+  - grafana-server.service
+  - aegisops-security-exporter.timer

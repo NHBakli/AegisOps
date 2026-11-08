@@ -4,7 +4,7 @@
     argv:
       - /usr/sbin/sshd
       - -T
-  register: ssh_config
+  register: audit_ssh_config
   changed_when: false
   failed_when: false
 
@@ -12,7 +12,7 @@
   ansible.builtin.debug:
     msg: >-
       {{
-        ssh_config.stdout_lines
+        audit_ssh_config.stdout_lines
         | select('match',
             '^(port|permitrootlogin|passwordauthentication|pubkeyauthentication|kbdinteractiveauthentication) ')
         | list
@@ -20,23 +20,23 @@
 
 - name: Evaluate SSH security settings
   ansible.builtin.set_fact:
-    ssh_security_checks:
+    audit_ssh_security_checks:
       root_login:
-        status: "{{ 'REVIEW' if ssh_config.rc != 0 else ('PASS' if 'permitrootlogin no' in ssh_config.stdout_lines else 'FAIL') }}"
+        status: "{{ 'REVIEW' if audit_ssh_config.rc != 0 else ('PASS' if 'permitrootlogin no' in audit_ssh_config.stdout_lines else 'FAIL') }}"
         description: Global sshd configuration should disable root login; Match rules require separate review
 
       password_auth:
-        status: "{{ 'REVIEW' if ssh_config.rc != 0 else ('PASS' if 'passwordauthentication no' in ssh_config.stdout_lines else 'FAIL') }}"
+        status: "{{ 'REVIEW' if audit_ssh_config.rc != 0 else ('PASS' if 'passwordauthentication no' in audit_ssh_config.stdout_lines else 'FAIL') }}"
         description: Global sshd configuration should disable password authentication; Match rules require separate review
 
       pubkey_auth:
-        status: "{{ 'REVIEW' if ssh_config.rc != 0 else ('PASS' if 'pubkeyauthentication yes' in ssh_config.stdout_lines else 'FAIL') }}"
+        status: "{{ 'REVIEW' if audit_ssh_config.rc != 0 else ('PASS' if 'pubkeyauthentication yes' in audit_ssh_config.stdout_lines else 'FAIL') }}"
         description: Global sshd configuration should enable public key authentication; Match rules require separate review
 
       keyboard_interactive:
-        status: "{{ 'REVIEW' if ssh_config.rc != 0 else ('PASS' if 'kbdinteractiveauthentication no' in ssh_config.stdout_lines else 'FAIL') }}"
+        status: "{{ 'REVIEW' if audit_ssh_config.rc != 0 else ('PASS' if 'kbdinteractiveauthentication no' in audit_ssh_config.stdout_lines else 'FAIL') }}"
         description: Global sshd configuration should disable keyboard-interactive authentication; Match rules require separate review
 
 - name: Display SSH security assessment
   ansible.builtin.debug:
-    var: ssh_security_checks
+    var: audit_ssh_security_checks

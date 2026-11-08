@@ -1,0 +1,42 @@
+---
+- name: Validate approval, server settings and peers
+  ansible.builtin.import_tasks: preflight_inputs.yml
+
+# Address arithmetic and route overlap use Python's ipaddress on the server,
+# because the pinned collections do not include ansible.utils.
+- name: Read IPv4 routes outside the VPN interface
+  ansible.builtin.command:
+    argv: [ip, -4, -o, route, show, table, all, type, unicast]
+  register: wireguard_routes
+  changed_when: false
+
+- name: Require a usable VPN network that overlaps no existing route
+  ansible.builtin.import_tasks: validate_network.yml
+
+- name: Check that the kernel provides WireGuard
+  ansible.builtin.command:
+    argv: [modprobe, --dry-run, wireguard]
+  register: wireguard_module
+  changed_when: false
+  failed_when: false
+
+- name: Require kernel WireGuard support
+  ansible.builtin.assert:
+    that:
+      - wireguard_module.rc == 0
+    fail_msg: >-
+      The kernel has no WireGuard module. On a KVM VM install the distribution
+      kernel; in an LXC container the Proxmox host must provide it.
+
+- name: Check that UFW is installed
+  ansible.builtin.command:
+    argv: [ufw, version]
+  register: wireguard_ufw
+  changed_when: false
+  failed_when: false
+
+- name: Require UFW to manage the WireGuard port
+  ansible.builtin.assert:
+    that:
+      - wireguard_ufw.rc == 0
+    fail_msg: UFW is not installed; run the firewall hardening first.

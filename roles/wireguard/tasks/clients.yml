@@ -1,0 +1,56 @@
+---
+# Client private keys stay on the controller (scripts/aegisops-wg-peer creates
+# them). A configuration is written only for peers whose key exists locally.
+- name: Look for client private keys on the controller
+  ansible.builtin.stat:
+    path: "{{ wireguard_client_directory }}/peers/{{ item.name }}.key"
+    get_checksum: false
+  loop: "{{ wireguard_peers }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: wireguard_client_keys
+  delegate_to: localhost
+  become: false
+
+- name: Require each local key to match its declared public key
+  ansible.builtin.assert:
+    that:
+      - wireguard_local_public_key == item.public_key
+    fail_msg: >-
+      {{ item.name }}: the local key does not match public_key in wireguard_peers.
+      Copy the value printed by scripts/aegisops-wg-peer new {{ item.name }}.
+    quiet: true
+  vars:
+    wireguard_local_public_key: >-
+      {{ lookup('ansible.builtin.file', wireguard_client_directory ~ '/peers/' ~ item.name ~ '.pub', errors='ignore') | default('', true) | trim }}
+  loop: "{{ wireguard_client_keys.results | selectattr('stat.exists') | map(attribute='item') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+  delegate_to: localhost
+  become: false
+
+- name: Write client configurations
+  ansible.builtin.template:
+    src: client.conf.j2
+    dest: "{{ wireguard_client_directory }}/{{ item.name }}.conf"
+    mode: "0600"
+  vars:
+    wireguard_client_private_key: >-
+      {{ lookup('ansible.builtin.file', wireguard_client_directory ~ '/peers/' ~ item.name ~ '.key') }}
+  loop: "{{ wireguard_client_keys.results | selectattr('stat.exists') | map(attribute='item') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+  delegate_to: localhost
+  become: false
+  no_log: true
+
+- name: Report client configurations
+  ansible.builtin.debug:
+    msg:
+      server_public_key: "{{ wireguard_server_public_key }}"
+      written: >-
+        {{ wireguard_client_keys.results | selectattr('stat.exists')
+           | map(attribute='item.name') | map('regex_replace', '^(.*)$', wireguard_client_directory ~ '/\1.conf') | list }}
+      missing_local_key: >-
+        {{ wireguard_client_keys.results | rejectattr('stat.exists')
+           | map(attribute='item.name') | list }}

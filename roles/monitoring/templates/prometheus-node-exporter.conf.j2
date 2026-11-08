@@ -1,0 +1,11 @@
+# Managed by AegisOps. Loopback listener and a minimal systemd unit filter.
+[Service]
+ExecStart=
+ExecStart=/usr/bin/prometheus-node-exporter \
+  --web.listen-address={{ monitoring_listen_address }}:{{ monitoring_ports.node_exporter }} \
+  --collector.textfile.directory={{ monitoring_textfile_directory }} \
+  --collector.systemd \
+  --collector.systemd.unit-include={{ monitoring_systemd_units | map('replace', '.', '[.]') | join('|') }}
+Environment=GOMEMLIMIT={{ (monitoring_node_exporter_memory_max_mb * 0.8) | int }}MiB
+MemoryMax={{ monitoring_node_exporter_memory_max_mb }}M
+CPUQuota=20%

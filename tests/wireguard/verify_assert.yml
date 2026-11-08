@@ -1,0 +1,28 @@
+---
+- name: Exercise the WireGuard state assertion with fixtures
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    wireguard_port: 51820
+    wireguard_server_address: 10.66.66.1
+    wireguard_server_public_key: "{{ fixture_server_key }}"
+    wireguard_peers: "{{ fixture_peers }}"
+    wireguard_show:
+      results:
+        - stdout: "{{ fixture_running_key }}"
+        - stdout: "{{ fixture_running_port }}"
+        - stdout_lines: "{{ fixture_running_allowed }}"
+    wireguard_enabled:
+      stdout: "{{ fixture_enabled }}"
+    wireguard_forwarding:
+      stdout: "{{ fixture_forwarding }}"
+    wireguard_confinement:
+      rc: "{{ fixture_confinement_rc }}"
+    wireguard_address:
+      stdout: "{{ fixture_address }}"
+    wireguard_ufw_status:
+      stdout_lines: "{{ fixture_ufw }}"
+  tasks:
+    - name: Run the real WireGuard assertion
+      ansible.builtin.import_tasks: ../../roles/wireguard/tasks/verify_assert.yml

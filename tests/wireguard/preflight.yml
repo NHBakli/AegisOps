@@ -1,0 +1,24 @@
+---
+- name: Exercise WireGuard input and network guards without changing the host
+  hosts: my-vps
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_user: aegisadmin
+    ansible_facts:
+      distribution: Ubuntu
+      distribution_version: "{{ fixture_distribution_version | default('24.04') }}"
+    wireguard_routes:
+      stdout: "{{ fixture_routes | default('') }}"
+  tasks:
+    - name: Load role defaults and fixed variables
+      ansible.builtin.include_vars: "{{ item }}"
+      loop:
+        - ../../roles/wireguard/defaults/main.yml
+        - ../../roles/wireguard/vars/main.yml
+
+    - name: Run the real input checks
+      ansible.builtin.import_tasks: ../../roles/wireguard/tasks/preflight_inputs.yml
+
+    - name: Run the real network checks against fixture routes
+      ansible.builtin.import_tasks: ../../roles/wireguard/tasks/validate_network.yml

@@ -1,0 +1,22 @@
+# Managed by AegisOps. Settings and secret come from a root-only file.
+[Unit]
+{% if monitoring_grafana_access == 'vpn' %}
+# Grafana listens on the VPN address: start after wg0 and stop with it.
+Wants=wg-quick@wg0.service
+After=wg-quick@wg0.service
+PartOf=wg-quick@wg0.service
+{% endif %}
+# Keep retrying, e.g. while wg0 is not up yet at boot.
+StartLimitIntervalSec=0
+
+[Service]
+EnvironmentFile={{ monitoring_grafana_env_file }}
+Environment=GOMEMLIMIT={{ (monitoring_grafana_memory_max_mb * 0.8) | int }}MiB
+MemoryMax={{ monitoring_grafana_memory_max_mb }}M
+CPUQuota=50%
+Restart=on-failure
+RestartSec=5
+# Per-service firewall, independent of UFW: only loopback{{ ' and VPN peers' if monitoring_grafana_access == 'vpn' else '' }}
+# may talk to Grafana (K3s pods are allowed by a broader UFW rule).
+IPAddressDeny=any
+IPAddressAllow=localhost{{ (' ' ~ wireguard_network) if monitoring_grafana_access == 'vpn' else '' }}

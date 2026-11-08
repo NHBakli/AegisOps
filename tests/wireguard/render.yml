@@ -1,0 +1,27 @@
+---
+- name: Render WireGuard templates locally
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_host: 203.0.113.10
+    wireguard_server_public_key: "{{ fixture_server_key }}"
+    wireguard_client_private_key: "{{ fixture_client_key }}"
+    item: "{{ wireguard_peers[0] }}"
+  tasks:
+    - name: Load role defaults and fixed variables
+      ansible.builtin.include_vars: "{{ path }}"
+      loop:
+        - ../../roles/wireguard/defaults/main.yml
+        - ../../roles/wireguard/vars/main.yml
+      loop_control:
+        loop_var: path
+
+    - name: Render server and client configurations
+      ansible.builtin.template:
+        src: "../../roles/wireguard/templates/{{ name }}.j2"
+        dest: "{{ output_dir }}/{{ name }}"
+        mode: "0600"
+      loop: [wg0.conf, client.conf]
+      loop_control:
+        loop_var: name

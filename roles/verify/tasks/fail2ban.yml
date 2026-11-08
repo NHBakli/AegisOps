@@ -19,10 +19,13 @@
 - name: Read actual IPv6 TCP listeners
   ansible.builtin.slurp:
     src: /proc/net/tcp6
-  register: fail2ban_hardening_tcp6
+  register: verify_fail2ban_tcp6
 
+# The shared check from the fail2ban role reads its own variable name.
 - name: Refuse an IPv6 SSH listener outside the IPv4 ban action's scope
   ansible.builtin.import_tasks: ../../fail2ban/tasks/verify_ipv4_scope.yml
+  vars:
+    fail2ban_hardening_tcp6: "{{ verify_fail2ban_tcp6 }}"
 
 - name: Read Fail2ban service state
   ansible.builtin.command:

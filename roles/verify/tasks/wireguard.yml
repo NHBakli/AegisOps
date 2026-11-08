@@ -1,0 +1,65 @@
+---
+- name: Require the declared WireGuard settings
+  ansible.builtin.assert:
+    that:
+      - wireguard_port is defined
+      - wireguard_server_address is defined
+      - wireguard_peers is defined
+      - wireguard_peers | length >= 1
+    fail_msg: Declare wireguard_port, wireguard_server_address and wireguard_peers.
+
+- name: Read the server public key
+  ansible.builtin.slurp:
+    src: /etc/wireguard/server.pub
+  register: verify_wireguard_public_key
+
+- name: Read the running WireGuard public key, port and peers
+  ansible.builtin.command:
+    argv: [wg, show, wg0, "{{ item }}"]
+  loop: [public-key, listen-port, allowed-ips]
+  register: verify_wireguard_show
+  changed_when: false
+
+- name: Read the wg0 IPv4 address
+  ansible.builtin.command:
+    argv: [ip, -4, -o, addr, show, dev, wg0]
+  register: verify_wireguard_address
+  changed_when: false
+
+- name: Read whether the tunnel starts at boot
+  ansible.builtin.command:
+    argv: [systemctl, is-enabled, wg-quick@wg0.service]
+  register: verify_wireguard_enabled
+  changed_when: false
+  failed_when: false
+
+- name: Read packet forwarding on wg0
+  ansible.builtin.command:
+    argv: [sysctl, -n, net.ipv4.conf.wg0.forwarding]
+  register: verify_wireguard_forwarding
+  changed_when: false
+
+- name: Check the rule confining peers to the server address
+  ansible.builtin.command:
+    argv: [iptables, -t, raw, -C, PREROUTING, -i, wg0, "!", -d, "{{ wireguard_server_address }}/32", -j, DROP]
+  register: verify_wireguard_confinement
+  changed_when: false
+  failed_when: false
+
+- name: Read UFW rules
+  ansible.builtin.command:
+    argv: [ufw, status]
+  register: verify_wireguard_ufw
+  changed_when: false
+
+# Same assertion as the wireguard role, fed with independently read values.
+- name: Require the running tunnel to match the declared configuration
+  ansible.builtin.import_tasks: ../../wireguard/tasks/verify_assert.yml
+  vars:
+    wireguard_server_public_key: "{{ verify_wireguard_public_key.content | b64decode | trim }}"
+    wireguard_show: "{{ verify_wireguard_show }}"
+    wireguard_address: "{{ verify_wireguard_address }}"
+    wireguard_ufw_status: "{{ verify_wireguard_ufw }}"
+    wireguard_enabled: "{{ verify_wireguard_enabled }}"
+    wireguard_forwarding: "{{ verify_wireguard_forwarding }}"
+    wireguard_confinement: "{{ verify_wireguard_confinement }}"

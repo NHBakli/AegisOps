@@ -1,0 +1,24 @@
+---
+- name: Probe the systemd sandboxing used by the monitoring services
+  ansible.builtin.command:
+    argv:
+      - systemd-run
+      - --wait
+      - --quiet
+      - --collect
+      - --property=PrivateTmp=yes
+      - --property=PrivateUsers=yes
+      - --property=PrivateDevices=yes
+      - --property=ProtectSystem=strict
+      - /bin/true
+  register: monitoring_sandbox_probe
+  changed_when: false
+  failed_when: false
+
+- name: Require namespace support for sandboxed services
+  ansible.builtin.assert:
+    that:
+      - monitoring_sandbox_probe.rc == 0
+    fail_msg: >-
+      systemd sandboxing is unavailable on this host. In an LXC container,
+      enable the Proxmox feature nesting=1 before deploying monitoring.

@@ -1,0 +1,69 @@
+---
+- name: Install WireGuard tools
+  ansible.builtin.apt:
+    name: wireguard-tools
+    state: present
+    install_recommends: false
+    cache_valid_time: 3600
+
+- name: Protect the WireGuard configuration directory
+  ansible.builtin.file:
+    path: /etc/wireguard
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+# Generated once on the server; Ansible only ever reads the public half.
+- name: Generate the server private key once
+  ansible.builtin.command:
+    argv: [/bin/sh, -c, "umask 077 && wg genkey > {{ wireguard_private_key_path }}"]
+    creates: "{{ wireguard_private_key_path }}"
+
+- name: Derive the server public key when it is missing
+  ansible.builtin.command:
+    argv:
+      - /bin/sh
+      - -c
+      - "wg pubkey < {{ wireguard_private_key_path }} > {{ wireguard_public_key_path }}"
+    creates: "{{ wireguard_public_key_path }}"
+
+- name: Read the server public key
+  ansible.builtin.slurp:
+    src: "{{ wireguard_public_key_path }}"
+  register: wireguard_server_public_key_file
+
+- name: Store the server public key
+  ansible.builtin.set_fact:
+    wireguard_server_public_key: "{{ wireguard_server_public_key_file.content | b64decode | trim }}"
+
+- name: Require a valid server public key
+  ansible.builtin.assert:
+    that:
+      - wireguard_server_public_key is match(wireguard_key_pattern)
+    fail_msg: "{{ wireguard_public_key_path }} does not contain a WireGuard public key."
+
+- name: Configure the wg0 interface and its peers
+  ansible.builtin.template:
+    src: wg0.conf.j2
+    dest: "{{ wireguard_config_path }}"
+    owner: root
+    group: root
+    mode: "0600"
+  notify: Restart WireGuard
+
+- name: Allow WireGuard through UFW
+  community.general.ufw:
+    rule: allow
+    port: "{{ wireguard_port | string }}"
+    proto: udp
+    comment: AegisOps WireGuard
+
+- name: Enable and start the WireGuard interface
+  ansible.builtin.systemd_service:
+    name: "{{ wireguard_unit }}"
+    enabled: true
+    state: started
+
+- name: Apply a changed tunnel configuration now
+  ansible.builtin.meta: flush_handlers

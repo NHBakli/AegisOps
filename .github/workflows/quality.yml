@@ -29,6 +29,8 @@ jobs:
           ansible-playbook -i inventories/example/hosts.yml playbooks/audit.yml --syntax-check
           ansible-playbook -i inventories/example/hosts.yml playbooks/hardening.yml --syntax-check
           ansible-playbook -i inventories/example/hosts.yml playbooks/verify.yml --syntax-check
+          ansible-playbook -i inventories/example/hosts.yml playbooks/monitoring.yml --syntax-check
+          ansible-playbook -i inventories/example/hosts.yml playbooks/vpn.yml --syntax-check
       - name: Lint repository
         run: |
           export PATH="/usr/bin:/usr/sbin:/bin:/sbin:$PATH"

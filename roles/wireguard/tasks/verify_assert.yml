@@ -1,0 +1,28 @@
+---
+- name: Assert key, port, peers, confinement, boot and firewall rule
+  ansible.builtin.assert:
+    that:
+      - wireguard_running.public_key == wireguard_server_public_key
+      - wireguard_running.port == (wireguard_port | string)
+      - (' ' ~ wireguard_server_address ~ '/') in wireguard_address.stdout
+      - wireguard_running.allowed | sort == wireguard_expected_allowed | sort
+      - wireguard_enabled.stdout | trim == 'enabled'
+      - wireguard_forwarding.stdout | trim == '0'
+      - wireguard_confinement.rc == 0
+      - >-
+        wireguard_ufw_status.stdout_lines
+        | select('match', '^' ~ wireguard_port ~ '/udp\\s+ALLOW( IN)?\\s+Anywhere(\\s|$)')
+        | list | length > 0
+    fail_msg: >-
+      wg0 does not match the declared key, port, address and peers, is not
+      enabled at boot, forwards packets, lacks the peer confinement rule, or
+      UFW does not allow {{ wireguard_port }}/udp from anywhere.
+  vars:
+    wireguard_running:
+      public_key: "{{ wireguard_show.results[0].stdout | trim }}"
+      port: "{{ wireguard_show.results[1].stdout | trim }}"
+      allowed: "{{ wireguard_show.results[2].stdout_lines | map('regex_replace', '\\s+', ' ') | list }}"
+    wireguard_expected_allowed: >-
+      {{ wireguard_peers | map(attribute='public_key')
+         | zip(wireguard_peers | map(attribute='address') | map('regex_replace', '$', '/32'))
+         | map('join', ' ') | list }}

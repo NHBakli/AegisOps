@@ -1,139 +1,178 @@
 # AegisOps
 
-Ansible pour auditer, durcir et vérifier des serveurs Ubuntu 22.04 et 24.04.
-La cible actuelle est Ubuntu 24.04 sous LXC. UFW est préparé mais reste
-inactif par défaut ; son activation dépend des capacités réseau disponibles
-dans LXC.
-Le projet est distribué sous licence [MIT](LICENSE).
+AegisOps est un projet Ansible qui **audite**, **durcit** puis **vérifie** la
+sécurité d'un serveur Ubuntu, et peut y ajouter une **supervision** locale
+(Prometheus et Grafana). Chaque étape est un playbook séparé. Les changements
+sensibles (SSH, pare-feu, redémarrages) ne s'appliquent qu'après des
+confirmations explicites, propres à chaque serveur, pour ne jamais te couper
+l'accès.
 
-## Cible
+Plateformes prises en charge : **Ubuntu 22.04 et 24.04**. La cible de référence
+est un VPS Ubuntu 24.04 sur une machine virtuelle KVM. Les rôles savent aussi
+reconnaître un conteneur LXC et y exigent des confirmations supplémentaires.
 
-`ansible.cfg` utilise l'inventaire d'exemple par défaut pour éviter de viser un
-serveur réel par inadvertance. `inventories/example/hosts.yml` utilise une
-adresse réservée à la documentation. Pour un vrai serveur, crée ton inventaire
-local, ignoré par Git :
+## Ce que fait AegisOps
+
+- Audit en lecture seule avec un rapport JSON (`reports/<hôte>.json`).
+- Création d'un administrateur non-root avec clé SSH et `sudo` explicite.
+- SSH : interdiction de root, des mots de passe et de l'authentification
+  interactive, avec test d'une nouvelle connexion et retour arrière automatique.
+- UFW : règles préparées, activation seulement sur décision séparée.
+- Fail2ban : jail SSH qui ignore ton adresse d'administration.
+- Mises à jour de sécurité automatiques, sans redémarrage par défaut.
+- Vérification indépendante de l'état réel du serveur.
+- Supervision accessible uniquement par tunnel SSH (aucun port ouvert).
+
+## Ce qu'il ne fait pas
+
+- Il ne promet pas une sécurité absolue : c'est une base raisonnable et
+  vérifiable.
+- Il ne gère pas les applications installées sur le serveur (par exemple K3s),
+  le filtrage réseau de l'hébergeur ou de Proxmox, ni IPv6 pour Fail2ban.
+- Il ne supprime pas de compte, ne remplace pas toute la configuration SSH et
+  n'active pas UFW ni le redémarrage automatique sans ton accord explicite.
+
+## Le principe en un schéma
+
+```text
+             ┌───────────┐    ┌──────────────┐    ┌────────────┐
+ ton poste   │   audit   │ -> │  hardening   │ -> │   verify   │
+ (Ansible) ->│ lecture   │    │ users → ssh  │    │  lecture   │
+             │ seule     │    │ → firewall → │    │  seule     │
+             │ + rapport │    │ fail2ban →   │    │            │
+             └───────────┘    │ updates      │    └─────┬──────┘
+                              └──────────────┘          │
+                                                ┌───────▼────────┐
+                                                │   monitoring   │
+                                                │ Prometheus +   │
+                                                │ Grafana via    │
+                                                │ tunnel SSH     │
+                                                └────────────────┘
+```
+
+## Prérequis
+
+- Un poste Linux avec Python 3, `ansible-core` (la CI utilise la version 2.16
+  fournie par Ubuntu 24.04) et un client OpenSSH.
+- Un serveur Ubuntu 22.04 ou 24.04 joignable en SSH par clé, avec `root` ou un
+  utilisateur `sudo` pour la première connexion.
+- Un accès de secours : console de l'hébergeur et, si possible, un snapshot.
+
+## Démarrage rapide
+
+Le guide détaillé, avec les explications de chaque étape, est dans
+[docs/getting-started.md](docs/getting-started.md).
 
 ```bash
+# 1. Collections Ansible épinglées
+ansible-galaxy collection install -r requirements.yml
+
+# 2. Inventaire local (ignoré par Git) : adresse, utilisateur initial, port
+mkdir -p inventories/production
 cp inventories/example/hosts.yml inventories/production/hosts.local.yml
-```
+# édite ce fichier : ansible_host, ansible_user (root au départ), ansible_port
 
-Modifie ensuite `inventories/production/hosts.local.yml` et indique ce chemin
-avec `-i` à chaque commande ciblant ce serveur. Pour auditer :
+# 3. Variables locales (ignorées par Git)
+cp hardening-vars.yml.example hardening-vars.yml
+ssh-keygen -t ed25519 -f ~/.ssh/aegisops_admin -C "aegisadmin@aegisops"
+# colle ~/.ssh/aegisops_admin.pub dans users_hardening_admin_public_keys
 
-```bash
+# 4. Audit (ne modifie rien)
 ansible-playbook -i inventories/production/hosts.local.yml playbooks/audit.yml
-```
 
-## Durcissement
+# 5. Création de l'administrateur seulement
+ansible-playbook -i inventories/production/hosts.local.yml \
+  playbooks/hardening.yml --tags users
 
-Sans tag, `hardening.yml` parcourt les rôles dans l'ordre : utilisateurs, SSH,
-UFW, Fail2ban, mises à jour. Les playbooks chargent automatiquement le fichier
-local `hardening-vars.yml`, commun à l'audit, au durcissement et à la
-vérification. Prépare-le une seule fois :
+# 6. Test manuel, dans un autre terminal (garde la session root ouverte)
+ssh -i ~/.ssh/aegisops_admin aegisadmin@203.0.113.10 'sudo -n true && echo OK'
+# puis users_hardening_admin_bootstrapped: true et les confirmations
 
-1. Copie le modèle :
+# 7. Durcissement complet (ssh, firewall, fail2ban, updates)
+ansible-playbook -i inventories/production/hosts.local.yml playbooks/hardening.yml
 
-   ```bash
-   cp hardening-vars.yml.example hardening-vars.yml
-   ```
-
-2. Génère une paire de clés dédiée sur ta machine. Choisis un autre nom si ce
-   fichier existe déjà :
-
-   ```bash
-   ssh-keygen -t ed25519 -f ~/.ssh/aegisops_admin -C "aegisadmin@aegisops"
-   ```
-
-   Copie la clé publique dans `users_hardening_admin_public_keys` :
-
-   ```bash
-   cat ~/.ssh/aegisops_admin.pub
-   ```
-
-   Garde la clé privée `~/.ssh/aegisops_admin` sur ta machine. Renseigne son
-   chemin absolu dans les variables de sonde. Ne partage jamais cette clé.
-3. Complète dans `hardening-vars.yml` le nom d'hôte et les confirmations
-   nécessaires. Fail2ban découvre automatiquement l'IPv4 source avec une
-   connexion SSH indépendante. Le pare-feu reste inactif par défaut. Ce
-   fichier est ignoré par Git.
-4. Pour créer le compte seulement, laisse
-   `users_hardening_admin_bootstrapped: false` et lance :
-
-   ```bash
-   ansible-playbook -i inventories/production/hosts.local.yml \
-     playbooks/hardening.yml --tags users
-   ```
-
-Teste ensuite une nouvelle connexion SSH avec cet administrateur et vérifie
-`sudo -n true`. Quand ces tests réussissent, passe
-`users_hardening_admin_bootstrapped` à `true`. Les prochaines exécutions
-passeront automatiquement l'étape de bootstrap root et utiliseront le compte
-administrateur. Pour lancer un seul domaine, utilise `--tags ssh`,
-`--tags firewall`, `--tags fail2ban` ou `--tags updates`.
-
-Si tu ajoutes un hash de mot de passe local, chiffre le fichier complet avec
-`ansible-vault encrypt hardening-vars.yml`, puis ajoute `--ask-vault-pass` aux
-commandes. Les prérequis sensibles restent vérifiés avant toute modification.
-
-## Vérifier l'état appliqué
-
-`verify.yml` contrôle l'état réellement présent sur le VPS sans le modifier.
-Les sections à exécuter se choisissent dans `hardening-vars.yml` avec
-`verify_users`, `verify_ssh`, `verify_firewall`, `verify_fail2ban` et
-`verify_updates`. Active uniquement les sections correspondant aux protections
-que tu veux vérifier. Laisse `verify_firewall: false` tant qu'UFW n'est pas
-activé.
-
-Pour les contrôles SSH et Fail2ban, récupère l'IPv4 source vue par le VPS avec
-une connexion SSH indépendante :
-
-```bash
-VPS_IP=203.0.113.10 # remplace par l'adresse de ton VPS
-ssh -i ~/.ssh/aegisops_admin "aegisadmin@$VPS_IP" 'echo "$SSH_CONNECTION"'
-```
-
-La première valeur affichée est l'IPv4 source. Renseigne-la dans
-`verify_ssh_source_ip`, `verify_ssh_source_host` et
-`fail2ban_hardening_admin_source_ip`. Pour `verify_ssh_source_host`, la même
-adresse convient lorsqu'il n'y a pas de règle SSH conditionnelle basée sur un
-nom d'hôte.
-
-Exemple de sections activées après le hardening SSH, Fail2ban et mises à jour :
-
-```yaml
-verify_users: true
-verify_ssh: true
-verify_firewall: false
-verify_fail2ban: true
-verify_updates: true
-verify_ssh_source_ip: "203.0.113.10"
-verify_ssh_source_host: "203.0.113.10"
-fail2ban_hardening_admin_source_ip: "203.0.113.10"
-```
-
-Lance ensuite la vérification :
-
-```bash
+# 8. Vérification indépendante (choisis les sections verify_*)
 ansible-playbook -i inventories/production/hosts.local.yml playbooks/verify.yml
+
+# 9. Supervision, puis tunnel SSH vers Grafana
+ansible-playbook -i inventories/production/hosts.local.yml \
+  playbooks/monitoring.yml -e @monitoring-vault.yml --ask-vault-pass
+ssh -N -L 3000:127.0.0.1:3000 -i ~/.ssh/aegisops_admin aegisadmin@203.0.113.10
+# ouvre http://localhost:3000
 ```
 
-Le playbook se connecte avec `aegisadmin` et la clé déclarée dans le fichier
-central. Un résultat `failed=0` confirme uniquement les sections activées ;
-les tâches des autres sections apparaissent comme ignorées.
+Remplace `203.0.113.10` (adresse de documentation) par l'adresse de ton
+serveur.
+
+## Les playbooks
+
+| Playbook | À quoi il sert | Modifie le serveur ? | Commande principale |
+|---|---|---|---|
+| `playbooks/audit.yml` | Inspecter et produire un rapport JSON | Non | `ansible-playbook -i <inventaire> playbooks/audit.yml` |
+| `playbooks/hardening.yml` | Appliquer les cinq domaines de durcissement | Oui | `ansible-playbook -i <inventaire> playbooks/hardening.yml [--tags ssh]` |
+| `playbooks/verify.yml` | Contrôler l'état réel, sans croire les variables | Non | `ansible-playbook -i <inventaire> playbooks/verify.yml` |
+| `playbooks/vpn.yml` | Installer le VPN WireGuard (ouvre 51820/udp) pour accéder au tableau de bord | Oui | `ansible-playbook -i <inventaire> playbooks/vpn.yml` |
+| `playbooks/monitoring.yml` | Installer Prometheus, node_exporter et Grafana (accès par tunnel SSH ou VPN) | Oui | `ansible-playbook -i <inventaire> playbooks/monitoring.yml -e @monitoring-vault.yml --ask-vault-pass` |
+
+Tags de `hardening.yml` : `users`, `ssh`, `firewall`, `fail2ban`, `updates`.
+Sans tag, tous les domaines sont parcourus dans cet ordre : chacun doit alors
+être configuré, sinon son garde arrête le playbook avant de modifier ce
+domaine.
+
+## Documentation
+
+| Document | Contenu |
+|---|---|
+| [docs/README.md](docs/README.md) | Index et ordre de lecture |
+| [docs/getting-started.md](docs/getting-started.md) | Guide pas à pas, du clone au serveur supervisé |
+| [docs/architecture.md](docs/architecture.md) | Organisation du dépôt, conventions, conception |
+| [docs/configuration.md](docs/configuration.md) | Référence de toutes les variables |
+| [docs/audit.md](docs/audit.md) | Contrôles de l'audit et format du rapport |
+| [docs/users-hardening.md](docs/users-hardening.md) | Compte administrateur |
+| [docs/ssh-hardening.md](docs/ssh-hardening.md) | Durcissement SSH |
+| [docs/firewall-hardening.md](docs/firewall-hardening.md) | Pare-feu UFW |
+| [docs/fail2ban.md](docs/fail2ban.md) | Jail SSH Fail2ban |
+| [docs/updates-hardening.md](docs/updates-hardening.md) | Mises à jour automatiques |
+| [docs/verify.md](docs/verify.md) | Vérification indépendante |
+| [docs/monitoring.md](docs/monitoring.md) | Supervision Prometheus et Grafana |
+| [docs/vpn.md](docs/vpn.md) | VPN WireGuard : accès au tableau de bord depuis PC, téléphone et laptop |
+| [docs/recovery.md](docs/recovery.md) | Récupérer l'accès et annuler un changement |
+| [docs/testing.md](docs/testing.md) | Tests locaux et CI |
+
+## Principes de sécurité
+
+- **Pas de verrouillage de root sans solution de rechange** : l'administrateur
+  est créé et testé d'abord ; chaque changement d'accès est suivi d'une nouvelle
+  connexion SSH indépendante, et SSH revient à l'ancienne configuration si ce
+  test échoue.
+- **Approbations par serveur** : les variables `*_approved_host` doivent valoir
+  le nom exact de l'hôte dans l'inventaire. Une approbation ne s'applique donc
+  jamais par erreur à un autre serveur.
+- **Confirmations honnêtes** : les variables `*_confirmed` déclarent des faits
+  que tu as vérifiés (console disponible, connexion testée). Ne les passe à
+  `true` qu'après les avoir vraiment testés.
+- **Décisions séparées** : activer UFW (`firewall_hardening_activate`) et
+  autoriser le redémarrage automatique (`updates_hardening_automatic_reboot`)
+  sont des choix distincts, désactivés par défaut.
+- **L'audit ne modifie jamais rien**, et `verify.yml` non plus.
+- **Aucun secret dans Git** : `hardening-vars.yml`, `monitoring-vault.yml`,
+  l'inventaire local et `reports/` sont ignorés par Git.
 
 ## Vérifications locales
 
 ```bash
 ansible-galaxy collection install -r requirements.yml --force
-ansible-playbook -i inventories/example/hosts.yml playbooks/hardening.yml --syntax-check
+for p in audit hardening verify monitoring vpn; do
+  ansible-playbook -i inventories/example/hosts.yml playbooks/$p.yml --syntax-check
+done
 ansible-lint --offline
 python3 -m unittest discover -s tests -p 'test_*.py'
 ```
 
-Si Ansible affiche que `community.general 13.0.1` ne supporte pas Core 2.16,
-la commande Galaxy ci-dessus installe la version 8.3.0 épinglée par le projet.
-Les tests locaux ne remplacent pas un essai isolé sur chaque version d'Ubuntu,
-en particulier pour SSH avec `ssh.socket` sur 24.04 et pour le filtrage LXC.
+Ces tests tournent sur ton poste, sans serveur distant. Voir
+[docs/testing.md](docs/testing.md) pour ce qu'ils couvrent et ce qu'ils ne
+peuvent pas prouver.
 
-Voir [docs/users-hardening.md](docs/users-hardening.md),
-[docs/verify.md](docs/verify.md) et les guides spécialisés dans `docs/`.
+## Licence
+
+Projet distribué sous licence [MIT](LICENSE).

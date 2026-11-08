@@ -1,0 +1,19 @@
+---
+# Deploys the WireGuard server used to reach the monitoring dashboard.
+# It opens 51820/udp in UFW; run it only with that approval recorded in
+# hardening-vars.yml (wireguard_ufw_rule_confirmed).
+- name: Deploy the AegisOps WireGuard VPN as administrator
+  hosts: vps
+  become: true
+  gather_facts: true
+  # Apply restarts even if a later task fails, so changes never stay pending.
+  force_handlers: true
+  vars_files:
+    - - ../hardening-vars.yml
+      - ../hardening-vars.yml.example
+  vars:
+    ansible_user: "{{ users_hardening_admin_username }}"
+    ansible_ssh_private_key_file: "{{ ssh_hardening_probe_private_key | default('') }}"
+
+  roles:
+    - role: wireguard

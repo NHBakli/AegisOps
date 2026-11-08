@@ -1,0 +1,111 @@
+---
+- name: Assert monitoring platform, approval and inputs
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution'] == 'Ubuntu'
+      - ansible_facts['distribution_version'] in ['22.04', '24.04']
+      - not ansible_check_mode
+      - monitoring_approved_host == inventory_hostname
+      - monitoring_admin_user is match('^[a-z_][a-z0-9_-]{0,30}$')
+      - monitoring_admin_user != 'root'
+      - ansible_user is defined
+      - ansible_user == monitoring_admin_user
+      - monitoring_grafana_admin_user is match('^[a-z][a-z0-9_-]{2,31}$')
+      - monitoring_prometheus_retention_time is match('^[0-9]+[dhw]$')
+      - monitoring_prometheus_retention_size is match('^[0-9]+(MB|GB)$')
+      - monitoring_scrape_interval is match('^[0-9]+s$')
+      - (monitoring_scrape_interval | regex_replace('s$', '') | int) >= 10
+      - monitoring_collector_interval is match('^[0-9]+(s|min)$')
+      - monitoring_collector_max_banned_ips is integer
+      - monitoring_collector_max_banned_ips >= 0
+      - monitoring_collector_max_banned_ips <= 1000
+      - monitoring_grafana_access in ['ssh_tunnel', 'vpn']
+      - >-
+        monitoring_grafana_access != 'vpn'
+        or (wireguard_server_address | default('')) is match('^([0-9]{1,3}\.){3}[0-9]{1,3}$')
+      - >-
+        monitoring_grafana_access != 'vpn'
+        or (wireguard_network | default('')) is match('^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$')
+    fail_msg: >-
+      Monitoring requires Ubuntu 22.04 or 24.04, host-specific approval, a run as
+      the non-root AegisOps administrator and valid retention, scrape and
+      collector values. Check mode is unsupported.
+
+- name: Read the VPN interface address
+  ansible.builtin.command:
+    argv: [ip, -4, -o, addr, show, dev, wg0]
+  register: monitoring_vpn_interface
+  changed_when: false
+  failed_when: false
+  when: monitoring_grafana_access == 'vpn'
+
+- name: Require the VPN to be deployed before Grafana listens on it
+  ansible.builtin.assert:
+    that:
+      - (' ' ~ wireguard_server_address ~ '/') in monitoring_vpn_interface.stdout
+    fail_msg: >-
+      wg0 does not carry {{ wireguard_server_address }}. Run playbooks/vpn.yml
+      first, or keep monitoring_grafana_access: ssh_tunnel.
+  when: monitoring_grafana_access == 'vpn'
+
+- name: Assert the Grafana administrator password is strong enough
+  ansible.builtin.assert:
+    that:
+      - monitoring_grafana_admin_password is string
+      - monitoring_grafana_admin_password is match('^[A-Za-z0-9+/=._~@%^*!:,-]{16,128}$')
+      - monitoring_grafana_admin_password != monitoring_grafana_admin_user
+    fail_msg: >-
+      Provide monitoring_grafana_admin_password (16 to 128 characters among letters,
+      digits and +/=._~@%^*!:,-) from an Ansible Vault encrypted variables file,
+      for example the output of: openssl rand -base64 24
+    quiet: true
+  no_log: true
+
+- name: Assert memory ceilings are integers within sane bounds
+  ansible.builtin.assert:
+    that:
+      - monitoring_prometheus_memory_max_mb is integer
+      - monitoring_prometheus_memory_max_mb >= 128
+      - monitoring_grafana_memory_max_mb is integer
+      - monitoring_grafana_memory_max_mb >= 128
+      - monitoring_node_exporter_memory_max_mb is integer
+      - monitoring_node_exporter_memory_max_mb >= 32
+      - monitoring_memory_reserve_mb is integer
+      - monitoring_memory_reserve_mb >= 256
+    fail_msg: Memory ceilings must be integers (MB) above the documented minimums.
+
+- name: Read memory already used by a previous monitoring deployment
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - show
+      - --property=MemoryCurrent
+      - --value
+      - prometheus.service
+      - prometheus-node-exporter.service
+      - grafana-server.service
+  register: monitoring_memory_in_use
+  changed_when: false
+  failed_when: false
+
+# A redeployment must not be refused because of the stack's own usage.
+- name: Compute the monitoring memory budget
+  ansible.builtin.set_fact:
+    monitoring_memory_budget_mb: >-
+      {{ monitoring_prometheus_memory_max_mb + monitoring_grafana_memory_max_mb
+         + monitoring_node_exporter_memory_max_mb }}
+    monitoring_memory_available_mb: >-
+      {{ (ansible_facts['memory_mb']['nocache']['free'] | default(0) | int)
+         + ((monitoring_memory_in_use.stdout_lines | default([])
+             | select('match', '^[0-9]+$') | map('int') | sum) / 1048576) | int }}
+
+- name: Refuse to deploy when the budget would leave too little free memory
+  ansible.builtin.assert:
+    that:
+      - >-
+        (monitoring_memory_available_mb | int)
+        >= (monitoring_memory_budget_mb | int) + monitoring_memory_reserve_mb
+    fail_msg: >-
+      Only {{ monitoring_memory_available_mb }} MB are available; the stack may use
+      up to {{ monitoring_memory_budget_mb }} MB and {{ monitoring_memory_reserve_mb }} MB
+      must stay free. Lower the ceilings or free memory first.

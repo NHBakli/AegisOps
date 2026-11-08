@@ -4,14 +4,14 @@
   connection: local
   gather_facts: true
   vars:
-    ssh_security_checks:
+    audit_ssh_security_checks:
       root_login: {status: FAIL, description: Test failure}
       pubkey_auth: {status: PASS, description: Test success}
-    user_security_checks:
+    audit_user_security_checks:
       sudo_members: {status: REVIEW, description: Test review}
-    firewall_security_checks:
+    audit_firewall_security_checks:
       ufw_active: {status: WARN, description: Test warning}
-    updates_security_checks:
+    audit_updates_security_checks:
       package_installed: {status: PASS, description: Test success}
   tasks:
     - name: Generate test report

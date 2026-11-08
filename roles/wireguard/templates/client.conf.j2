@@ -1,0 +1,12 @@
+# AegisOps VPN for {{ item.name }}. Contains a private key: keep it 0600.
+# Only {{ wireguard_server_address }} goes through the tunnel; the rest of the
+# traffic keeps using the normal connection.
+[Interface]
+PrivateKey = {{ wireguard_client_private_key }}
+Address = {{ item.address }}/32
+MTU = 1280
+
+[Peer]
+PublicKey = {{ wireguard_server_public_key }}
+Endpoint = {{ wireguard_endpoint }}:{{ wireguard_port }}
+AllowedIPs = {{ wireguard_server_address }}/32

@@ -1,0 +1,10 @@
+---
+wireguard_interface: wg0
+wireguard_unit: wg-quick@wg0.service
+wireguard_config_path: /etc/wireguard/wg0.conf
+# The server private key is generated on the server and never read by Ansible.
+wireguard_private_key_path: /etc/wireguard/server.key
+wireguard_public_key_path: /etc/wireguard/server.pub
+wireguard_peer_name_pattern: '^[a-z0-9][a-z0-9-]{0,31}$'
+# 32 bytes in base64: 43 characters, the last one constrained, then "=".
+wireguard_key_pattern: '^[A-Za-z0-9+/]{42}[AEIMQUYcgkosw048]=$'

@@ -1,0 +1,158 @@
+---
+- name: Configure Prometheus local scrape targets
+  ansible.builtin.template:
+    src: prometheus.yml.j2
+    dest: /etc/prometheus/prometheus.yml
+    owner: root
+    group: root
+    mode: "0644"
+    validate: promtool check config %s
+  notify: Restart prometheus
+
+- name: Ensure the textfile collector directory exists
+  ansible.builtin.file:
+    path: "{{ monitoring_textfile_directory }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the AegisOps security collector
+  ansible.builtin.copy:
+    src: aegisops-security-exporter.py
+    dest: "{{ monitoring_collector_path }}"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the security collector systemd units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - aegisops-security-exporter.service
+    - aegisops-security-exporter.timer
+  notify: Reload systemd
+
+- name: Grant Grafana read access to provisioning
+  ansible.builtin.template:
+    src: "grafana-{{ item.src }}.yml.j2"
+    dest: "/etc/grafana/provisioning/{{ item.dest }}/aegisops.yml"
+    owner: root
+    group: grafana
+    mode: "0640"
+  loop:
+    - {src: datasource, dest: datasources}
+    - {src: dashboards, dest: dashboards}
+  notify: Restart grafana-server
+
+- name: Create the provisioned dashboard directory
+  ansible.builtin.file:
+    path: "{{ monitoring_grafana_dashboard_directory }}"
+    state: directory
+    owner: root
+    group: grafana
+    mode: "0750"
+
+- name: Install the AegisOps dashboards
+  ansible.builtin.copy:
+    src: dashboards/
+    dest: "{{ monitoring_grafana_dashboard_directory }}/"
+    owner: root
+    group: grafana
+    mode: "0640"
+    directory_mode: "0750"
+  notify: Restart grafana-server
+
+- name: Check whether UFW is installed
+  ansible.builtin.command:
+    argv: [ufw, version]
+  register: monitoring_ufw
+  changed_when: false
+  failed_when: false
+
+# The rule exists only in VPN mode and is removed when going back to the tunnel.
+- name: Allow Grafana from the VPN interface only
+  community.general.ufw:
+    rule: allow
+    direction: in
+    interface: wg0
+    to_ip: "{{ wireguard_server_address | default('127.0.0.1') }}"
+    port: "{{ monitoring_ports.grafana | string }}"
+    proto: tcp
+    comment: AegisOps Grafana via VPN
+    delete: "{{ monitoring_grafana_access != 'vpn' }}"
+  when: >-
+    monitoring_grafana_access == 'vpn'
+    or (monitoring_ufw.rc == 0 and wireguard_server_address is defined)
+
+- name: Create the WireGuard unit drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/wg-quick@wg0.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: monitoring_grafana_access == 'vpn'
+
+# Starting wg0 also starts Grafana again after a manual stop/start of the VPN.
+- name: Start Grafana together with the VPN interface
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/wg-quick@wg0.service.d/aegisops-grafana.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by AegisOps (monitoring_grafana_access: vpn).
+      [Unit]
+      Wants=grafana-server.service
+  when: monitoring_grafana_access == 'vpn'
+  notify: Reload systemd
+
+- name: Remove the VPN start link in SSH tunnel mode
+  ansible.builtin.file:
+    path: /etc/systemd/system/wg-quick@wg0.service.d/aegisops-grafana.conf
+    state: absent
+  when: monitoring_grafana_access != 'vpn'
+  notify: Reload systemd
+
+- name: Apply pending systemd unit changes
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start the monitoring services and timers
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop:
+    - prometheus-node-exporter.service
+    - prometheus.service
+    - grafana-server.service
+    - prometheus-node-exporter-apt.timer
+    - aegisops-security-exporter.timer
+
+- name: List hardware collector timers shipped by the collectors package
+  ansible.builtin.command:
+    argv: "{{ ['systemctl', 'list-unit-files', '--no-legend', '--plain'] + monitoring_disabled_collector_timers }}"
+  register: monitoring_hardware_timers
+  changed_when: false
+  failed_when: monitoring_hardware_timers.rc not in [0, 1]
+
+- name: Stop and mask hardware collectors that are useless on a virtual machine
+  ansible.builtin.systemd_service:
+    name: "{{ item }}"
+    enabled: false
+    state: stopped
+    masked: true
+  loop: >-
+    {{ monitoring_hardware_timers.stdout_lines | map('split') | map('first')
+       | select('in', monitoring_disabled_collector_timers) | list }}
+
+- name: Clear failures left by hardware collectors started at install time
+  ansible.builtin.command:
+    argv: "{{ ['systemctl', 'reset-failed'] + (monitoring_disabled_collector_timers | map('replace', '.timer', '.service') | list) }}"
+  changed_when: false
+  failed_when: false

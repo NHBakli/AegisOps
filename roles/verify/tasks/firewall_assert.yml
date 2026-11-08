@@ -5,6 +5,7 @@
       {{
         verify_ufw_status.stdout_lines
         | select('search', 'ALLOW IN')
+        | reject('search', '# AegisOps (WireGuard|Grafana via VPN)$')
         | map('split') | map('first')
         | unique | list
       }}
@@ -21,7 +22,9 @@
 - name: Assert UFW is active with the expected default and SSH allowance
   ansible.builtin.assert:
     that:
-      - (verify_ufw_status.stdout_lines | first | default('') | trim) == 'Status: active'
+      # Quoted: the ": " inside would otherwise make YAML read a dictionary,
+      # which older Ansible versions silently treated as true.
+      - "(verify_ufw_status.stdout_lines | first | default('') | trim) == 'Status: active'"
       - >-
         ('Default: ' ~ (firewall_hardening_default_incoming | default('deny'))
          ~ ' (incoming), allow (outgoing)') in verify_ufw_status.stdout
