@@ -1,12 +1,16 @@
 ---
+# Same default as roles/wireguard: the port may be omitted from the variables.
+- name: Resolve the expected WireGuard port
+  ansible.builtin.set_fact:
+    verify_wireguard_port: "{{ wireguard_port | default(51820) | int }}"
+
 - name: Require the declared WireGuard settings
   ansible.builtin.assert:
     that:
-      - wireguard_port is defined
       - wireguard_server_address is defined
       - wireguard_peers is defined
       - wireguard_peers | length >= 1
-    fail_msg: Declare wireguard_port, wireguard_server_address and wireguard_peers.
+    fail_msg: Declare wireguard_server_address and wireguard_peers.
 
 - name: Read the server public key
   ansible.builtin.slurp:
@@ -56,6 +60,7 @@
 - name: Require the running tunnel to match the declared configuration
   ansible.builtin.import_tasks: ../../wireguard/tasks/verify_assert.yml
   vars:
+    wireguard_port: "{{ verify_wireguard_port }}"
     wireguard_server_public_key: "{{ verify_wireguard_public_key.content | b64decode | trim }}"
     wireguard_show: "{{ verify_wireguard_show }}"
     wireguard_address: "{{ verify_wireguard_address }}"

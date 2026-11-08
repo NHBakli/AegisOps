@@ -28,6 +28,8 @@ class VerifyTest(unittest.TestCase):
                 "verify_firewall": False,
                 "verify_fail2ban": False,
                 "verify_updates": False,
+                "verify_monitoring": False,
+                "verify_wireguard": False,
             }
             test_variables.update(variables)
             return subprocess.run(
@@ -45,6 +47,22 @@ class VerifyTest(unittest.TestCase):
         self.assertEqual(result.returncode == 0, expected_success,
                          result.stdout + result.stderr)
         self.assertIn("changed=0", result.stdout)
+
+    def test_selection_guard_accepts_an_untagged_run_with_a_section(self):
+        # Regression: ansible-core 2.20 turned ansible_run_tags into a tuple.
+        for section in ("verify_users", "verify_monitoring", "verify_wireguard"):
+            with self.subTest(section=section):
+                result = self.run_playbook("tests/verify/selection.yml", {section: True})
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_selection_guard_rejects_no_section_or_tagged_runs(self):
+        self.assertNotEqual(self.run_playbook("tests/verify/selection.yml", {}).returncode, 0)
+        tagged = self.run_playbook("tests/verify/selection.yml", {"verify_users": True},
+                                   ("--tags", "always"))
+        self.assertNotEqual(tagged.returncode, 0)
+        skipped = self.run_playbook("tests/verify/selection.yml", {"verify_users": True},
+                                    ("--skip-tags", "ssh"))
+        self.assertNotEqual(skipped.returncode, 0)
 
     def test_platform_guard_accepts_supported_ubuntu_releases_only(self):
         for version, expected_success in (("22.04", True), ("24.04", True),
