@@ -135,12 +135,47 @@ ansible-playbook -i inventories/production/hosts.local.yml playbooks/vpn.yml
 
 **PC Linux**
 
+Copie d'abord la configuration à son emplacement système, sous le nom du
+tunnel (`aegisops`) :
+
 ```bash
 sudo install -m 600 ~/.config/aegisops/wireguard/pc-linux.conf /etc/wireguard/aegisops.conf
+```
+
+Choisis ensuite **une seule** des deux méthodes suivantes.
+
+*Méthode A — PC de bureau (GNOME, KDE…) : NetworkManager (recommandée)*
+
+```bash
+sudo nmcli connection import type wireguard file /etc/wireguard/aegisops.conf
+```
+
+Le VPN apparaît alors dans le menu réseau en haut à droite (**VPN →
+aegisops**) et dans **Paramètres → Réseau → VPN**. Allume-le ou éteins-le d'un
+clic. Il se reconnecte seul au démarrage. Pour l'éviter :
+`nmcli connection modify aegisops connection.autoconnect no`.
+
+En ligne de commande : `nmcli connection up aegisops` /
+`nmcli connection down aegisops`.
+
+*Méthode B — machine sans interface graphique : `wg-quick`*
+
+```bash
 sudo systemctl enable --now wg-quick@aegisops   # connecté maintenant et à chaque démarrage
 ```
 
 Pour te déconnecter : `sudo systemctl stop wg-quick@aegisops`.
+
+> **Ne mélange pas les deux.** Avec la méthode B sur un PC de bureau, le menu
+> réseau affiche quand même « aegisops ». Si tu le coupes depuis ce menu,
+> NetworkManager retire l'adresse du tunnel alors que `wg-quick` le croit
+> toujours actif : `10.66.66.1` ne répond plus. Pour passer de B à A :
+>
+> ```bash
+> sudo systemctl disable --now wg-quick@aegisops
+> sudo nmcli connection delete aegisops 2>/dev/null   # entrée créée automatiquement, si elle existe
+> sudo nmcli connection import type wireguard file /etc/wireguard/aegisops.conf
+> ```
 
 **Téléphone (Android ou iPhone)**
 
@@ -226,6 +261,7 @@ toutes les 5 secondes jusqu'à ce que l'adresse existe.
 | Pages qui se figent sur réseau mobile | Le MTU est déjà réduit à 1280. Si ça persiste, essaie un autre réseau pour confirmer, puis signale-le. |
 | Conflit de port avec K3s | Si K3s passe un jour au backend flannel `wireguard-native`, il utilisera aussi 51820/udp : choisis un autre `wireguard_port` (par exemple 51821). |
 | `overlaps the existing route` | Choisis un autre `wireguard_network` et `wireguard_server_address` (par exemple `10.77.77.0/24` et `10.77.77.1`), ainsi que les adresses des appareils. |
+| PC Linux : `ping 10.66.66.1` échoue alors que le VPN semble actif | `ip addr show aegisops` n'affiche pas d'adresse `10.66.66.x` : le tunnel a été coupé depuis le menu réseau alors qu'il était lancé par `wg-quick`. Dépannage immédiat : `sudo systemctl restart wg-quick@aegisops`. Solution durable : la méthode A (NetworkManager seul), voir l'étape 3. |
 | Le tunnel SSH ne marche plus | Normal en mode VPN : Grafana n'écoute plus sur `127.0.0.1`. Repasse `monitoring_grafana_access: ssh_tunnel` pour revenir au tunnel. |
 
 ## Revenir en arrière
@@ -240,6 +276,9 @@ toutes les 5 secondes jusqu'à ce que l'adresse existe.
    sudo rm -f /etc/wireguard/wg0.conf /etc/wireguard/server.key /etc/wireguard/server.pub
    ```
 
-3. Sur chaque appareil, supprime le tunnel `aegisops`.
+3. Sur chaque appareil, supprime le tunnel `aegisops`. Sur le PC Linux :
+   `sudo nmcli connection delete aegisops` (méthode A) ou
+   `sudo systemctl disable --now wg-quick@aegisops` (méthode B), puis
+   `sudo rm /etc/wireguard/aegisops.conf`.
 
 L'accès SSH n'est jamais concerné par ces étapes.
