@@ -102,6 +102,30 @@ class VerifyTest(unittest.TestCase):
         self.assert_fixture({**base, "fixture_root_ssh_lines":
                              [*root[:-1], "kbdinteractiveauthentication yes"]}, False)
 
+    def test_firewall_accepts_only_reviewed_external_rules(self):
+        base = ("Status: active\nDefault: deny (incoming), allow (outgoing), deny (routed)\n"
+                "22/tcp  ALLOW IN  Anywhere  # AegisOps SSH access\n")
+        external = ("Anywhere  ALLOW IN  10.42.0.0/16  # Project OS K3s\n"
+                    "80/tcp  ALLOW IN  Anywhere  # Project OS ingress\n"
+                    "443/tcp (v6)  ALLOW IN  Anywhere (v6)  # Project OS ingress\n")
+        accepted = ["Project OS K3s", "Project OS ingress"]
+        cases = [
+            ("external rules not reviewed", base + external, [], False),
+            ("external rules reviewed", base + external, accepted, True),
+            ("partial review", base + external, ["Project OS K3s"], False),
+            ("unknown rule beside reviewed ones",
+             base + external + "3306/tcp  ALLOW IN  Anywhere  # database\n", accepted, False),
+            ("comment must match exactly",
+             base + "8080/tcp  ALLOW IN  Anywhere  # Project OS ingress extra\n", accepted, False),
+            ("AegisOps rules cannot be exempted", base + external, accepted + ["AegisOps SSH access"], False),
+            ("unsafe comment characters", base, ["Project OS|.*"], False),
+        ]
+        for name, output, comments, expected in cases:
+            with self.subTest(case=name):
+                self.assert_fixture({"fixture_kind": "firewall", "fixture_ufw_output": output,
+                                     "verify_firewall_accepted_external_comments": comments},
+                                    expected)
+
     def test_users_requires_managed_sudoers_policy(self):
         base = {"fixture_kind": "users"}
         self.assert_fixture({**base, "fixture_sudoers":

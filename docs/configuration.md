@@ -125,6 +125,7 @@ rôle refuse de tourner.
 | `verify_fail2ban` | `false` | au moins une section | Vérifie la jail SSH. |
 | `verify_updates` | `false` | au moins une section | Vérifie la politique APT et les timers. |
 | `verify_monitoring` | `false` | au moins une section | Vérifie la supervision. |
+| `verify_firewall_accepted_external_comments` | `[]` | non | Commentaires exacts des règles UFW posées par un autre outil (par exemple K3s), acceptées après relecture. Toute autre règle non déclarée fait toujours échouer `verify_firewall`. Les règles AegisOps ne peuvent pas y figurer. |
 | `verify_wireguard` | `false` | au moins une section | Vérifie le tunnel WireGuard, ses appareils, son cloisonnement et sa règle UFW. |
 | `verify_ssh_admin_user` | `""` | si `verify_ssh` | Administrateur, jamais `root`. |
 | `verify_ssh_source_ip` | `""` | si `verify_ssh` | Adresse de ton poste vue par le serveur. |

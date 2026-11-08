@@ -38,6 +38,25 @@ qu'elle doit trouver.
 | `verify_monitoring` | `prometheus`, `prometheus-node-exporter`, `grafana-server` et le timer du collecteur actifs ; 9090 et 9100 en écoute **uniquement** sur `127.0.0.1`, 3000 uniquement sur `127.0.0.1` (ou sur l'adresse VPN en mode `vpn`) ; Grafana protégé par `IPAddressDeny=any` ; métriques de sécurité rafraîchies il y a moins de 10 minutes | `monitoring_grafana_access`, `wireguard_server_address` en mode VPN |
 | `verify_wireguard` | `wg0` porte l'adresse du serveur et démarre au boot ; clé publique et port conformes ; **exactement** les appareils déclarés, chacun limité à son adresse ; routage coupé et règle de cloisonnement `raw` présente ; règle UFW `51820/udp` ouverte à tous | `wireguard_port`, `wireguard_server_address`, `wireguard_peers` |
 
+### Règles UFW posées par un autre outil
+
+`verify_firewall` exige que les ports ouverts soient **exactement** ceux
+déclarés dans AegisOps. Si un autre outil a ajouté ses propres règles (par
+exemple K3s pour l'ingress 80/443), relis-les, puis accepte-les par leur
+commentaire UFW exact :
+
+```yaml
+verify_firewall_accepted_external_comments:
+  - Project OS K3s
+  - Project OS ingress
+```
+
+La vérification affiche alors ces règles dans la tâche « Report rules
+accepted as managed outside AegisOps ». Toute autre règle inconnue, ou une
+règle dont le commentaire diffère même légèrement, fait toujours échouer la
+vérification. Le message d'échec liste les ports non déclarés. Les règles
+AegisOps ne peuvent pas être exemptées.
+
 Pour connaître l'adresse source vue par le serveur :
 
 ```bash

@@ -1,4 +1,37 @@
 ---
+- name: Require a reviewed list of externally managed rule comments
+  ansible.builtin.assert:
+    that:
+      - verify_firewall_accepted_external_comments | default([]) is sequence
+      - verify_firewall_accepted_external_comments | default([]) is not string
+      - >-
+        verify_firewall_accepted_external_comments | default([])
+        | reject('match', '^[A-Za-z0-9][A-Za-z0-9 ._:/()-]{0,62}$') | list | length == 0
+      - >-
+        verify_firewall_accepted_external_comments | default([])
+        | select('match', '(?i)^aegisops') | list | length == 0
+    fail_msg: >-
+      verify_firewall_accepted_external_comments must list exact UFW comments
+      (letters, digits, spaces, ._:/()-). AegisOps rules cannot be exempted.
+
+# AegisOps VPN rules are checked by verify_wireguard and verify_monitoring;
+# accepted external rules are reported below instead of failing.
+- name: Identify rules accepted as managed outside AegisOps
+  vars:
+    verify_ufw_external_pattern: >-
+      # ({{ verify_firewall_accepted_external_comments | default([])
+      | map('regex_escape') | join('|') }})$
+  ansible.builtin.set_fact:
+    verify_ufw_external_rules: >-
+      {{
+        verify_ufw_status.stdout_lines
+        | select('search', 'ALLOW IN')
+        | select('search', verify_ufw_external_pattern)
+        | list
+        if verify_firewall_accepted_external_comments | default([]) | length > 0
+        else []
+      }}
+
 - name: Normalize visible inbound openings for comparison
   ansible.builtin.set_fact:
     verify_ufw_open_ports: >-
@@ -6,6 +39,7 @@
         verify_ufw_status.stdout_lines
         | select('search', 'ALLOW IN')
         | reject('search', '# AegisOps (WireGuard|Grafana via VPN)$')
+        | reject('in', verify_ufw_external_rules)
         | map('split') | map('first')
         | unique | list
       }}
@@ -34,4 +68,14 @@
         | list | length > 0
       - verify_ufw_open_ports | sort == verify_ufw_expected_ports | sort
       - verify_ufw_status.stdout_lines | select('search', 'LIMIT IN') | list | length == 0
-    fail_msg: UFW is inactive or its visible policy does not permit the expected SSH port.
+    fail_msg: >-
+      UFW is inactive, its visible policy does not permit the expected SSH
+      port, or it opens undeclared ports: {{ verify_ufw_open_ports
+      | difference(verify_ufw_expected_ports) }}. Declare them in
+      firewall_hardening_allowed_inbound, or accept rules managed by another
+      tool by their comment in verify_firewall_accepted_external_comments.
+
+- name: Report rules accepted as managed outside AegisOps
+  ansible.builtin.debug:
+    msg: "{{ verify_ufw_external_rules | map('regex_replace', '\\s+', ' ') | list }}"
+  when: verify_ufw_external_rules | length > 0

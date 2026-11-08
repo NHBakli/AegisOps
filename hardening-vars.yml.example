@@ -87,6 +87,9 @@ verify_fail2ban: false
 verify_updates: false
 verify_monitoring: false
 verify_wireguard: false
+# UFW rules managed by another tool, accepted by their exact comment after
+# review. Any other undeclared rule still fails verify_firewall.
+verify_firewall_accepted_external_comments: []
 verify_ssh_source_ip: ""
 verify_ssh_source_host: ""
 verify_ssh_admin_user: aegisadmin
