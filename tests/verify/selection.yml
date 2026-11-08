@@ -1,0 +1,11 @@
+---
+- name: Exercise the verify section and tag guard with the real run tags
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Load verify defaults
+      ansible.builtin.include_vars: ../../roles/verify/defaults/main.yml
+
+    - name: Run the real selection guard
+      ansible.builtin.import_tasks: ../../roles/verify/tasks/selection.yml

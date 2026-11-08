@@ -1,10 +1,28 @@
-# Local inventories
+# Local inventories (real hosts and addresses)
 /inventories/lab/hosts.yml
 /inventories/production/hosts.yml
 /inventories/production/hosts.local.yml
 
-# Security audit reports
+# Local Ansible variables and secrets
+/hardening-vars.yml
+/monitoring-vault.yml
+# Older per-domain files, superseded by hardening-vars.yml
+/admin-vars.yml
+/ssh-vars.yml
+/fail2ban-vars.yml
+
+# Audit reports describe a real server
 reports/
+
+# Secrets and private keys
+*.pem
+*.key
+*.p12
+*.pfx
+*.vault
+.vault_pass
+.env
+.env.*
 
 # Ansible temporary files
 *.retry
@@ -16,33 +34,14 @@ __pycache__/
 .venv/
 venv/
 
-# Secrets and private keys
-*.pem
-*.key
-*.p12
-*.pfx
-*.vault
-.vault_pass
-
-# Local environment variables
-.env
-.env.*
-
-# Editor files
-.vscode/
-.idea/
-
-# System files
-.DS_Store
+# Local agent context and cloud configuration
 AGENTS.md
-# Local agent and cloud configuration
+Context.md
 .agents
 .aws
 .codex
-Context.md
 
-# Local Ansible variables
-/admin-vars.yml
-/ssh-vars.yml
-/fail2ban-vars.yml
-/hardening-vars.yml
+# Editor and system files
+.vscode/
+.idea/
+.DS_Store

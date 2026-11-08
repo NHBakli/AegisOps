@@ -1,0 +1,39 @@
+---
+- name: Read monitoring service states
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - is-active
+      - prometheus.service
+      - prometheus-node-exporter.service
+      - grafana-server.service
+      - aegisops-security-exporter.timer
+  register: verify_monitoring_services
+  changed_when: false
+  failed_when: false
+
+- name: Read TCP listeners for monitoring exposure
+  ansible.builtin.command:
+    argv: [ss, -Htln]
+  register: verify_monitoring_listeners
+  changed_when: false
+
+- name: Read the security metrics file age
+  ansible.builtin.stat:
+    path: /var/lib/prometheus/node-exporter/aegisops.prom
+  register: verify_monitoring_metrics
+
+- name: Read the Grafana per-service network filter
+  ansible.builtin.command:
+    argv: [systemctl, show, --property=IPAddressDeny, --value, grafana-server.service]
+  register: verify_monitoring_ip_deny
+  changed_when: false
+
+- name: Read the remote clock
+  ansible.builtin.command:
+    argv: [date, +%s]
+  register: verify_monitoring_clock
+  changed_when: false
+
+- name: Require active, loopback-only and fresh monitoring
+  ansible.builtin.import_tasks: monitoring_assert.yml

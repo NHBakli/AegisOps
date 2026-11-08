@@ -1,0 +1,21 @@
+---
+- name: Exercise the monitoring verification assertion with fixtures
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    verify_monitoring_ip_deny:
+      stdout: "{{ fixture_ip_deny | default('0.0.0.0/0 ::/0') }}"
+    verify_monitoring_clock:
+      stdout: "1000"
+    verify_monitoring_services:
+      stdout_lines: "{{ fixture_states | default(['active', 'active', 'active', 'active']) }}"
+    verify_monitoring_listeners:
+      stdout_lines: "{{ fixture_listeners }}"
+    verify_monitoring_metrics:
+      stat:
+        exists: true
+        mtime: "{{ fixture_mtime | default(900) }}"
+  tasks:
+    - name: Run the real monitoring assertion
+      ansible.builtin.import_tasks: ../../roles/verify/tasks/monitoring_assert.yml

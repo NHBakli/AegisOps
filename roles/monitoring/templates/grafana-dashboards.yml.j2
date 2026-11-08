@@ -1,0 +1,10 @@
+# Managed by AegisOps.
+apiVersion: 1
+providers:
+  - name: AegisOps
+    folder: AegisOps
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: {{ monitoring_grafana_dashboard_directory }}

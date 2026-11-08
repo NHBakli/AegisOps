@@ -1,0 +1,52 @@
+---
+- name: Assert WireGuard platform, approval and server settings
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution'] == 'Ubuntu'
+      - ansible_facts['distribution_version'] in ['22.04', '24.04']
+      - not ansible_check_mode
+      - wireguard_approved_host == inventory_hostname
+      - wireguard_ufw_rule_confirmed | bool
+      - wireguard_admin_user is match('^[a-z_][a-z0-9_-]{0,30}$')
+      - wireguard_admin_user != 'root'
+      - ansible_user is defined
+      - ansible_user == wireguard_admin_user
+      - wireguard_endpoint is match('^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$')
+      - wireguard_reserved_networks is sequence
+      - wireguard_reserved_networks is not string
+      - wireguard_port is integer
+      - wireguard_port >= 1024
+      - wireguard_port <= 65535
+      - wireguard_network is match('^([0-9]{1,3}\.){3}[0-9]{1,3}/(1[6-9]|2[0-9])$')
+      - wireguard_server_address is match('^([0-9]{1,3}\.){3}[0-9]{1,3}$')
+      - wireguard_peers is sequence
+      - wireguard_peers is not string
+      - wireguard_peers | length >= 1
+    fail_msg: >-
+      WireGuard requires Ubuntu 22.04 or 24.04, host-specific approval, explicit
+      confirmation of the UFW rule, a run as the non-root administrator, an
+      IPv4 or host name endpoint, a private /16-/29 network, an unprivileged
+      UDP port and at least one peer.
+
+- name: Assert each peer is well formed
+  ansible.builtin.assert:
+    that:
+      - item is mapping
+      - item.keys() | difference(['name', 'address', 'public_key']) | length == 0
+      - item.name is match(wireguard_peer_name_pattern)
+      - item.address is match('^([0-9]{1,3}\.){3}[0-9]{1,3}$')
+      - item.public_key is match(wireguard_key_pattern)
+    fail_msg: >-
+      Peer {{ item.name | default('?') }} needs only name (lowercase, digits,
+      dashes), address (IPv4) and a WireGuard public_key (44 base64 characters).
+  loop: "{{ wireguard_peers }}"
+  loop_control:
+    label: "{{ item.name | default('?') }}"
+
+- name: Assert peer names, addresses and keys are unique
+  ansible.builtin.assert:
+    that:
+      - wireguard_peers | map(attribute='name') | unique | length == wireguard_peers | length
+      - wireguard_peers | map(attribute='address') | unique | length == wireguard_peers | length
+      - wireguard_peers | map(attribute='public_key') | unique | length == wireguard_peers | length
+    fail_msg: Each peer needs its own name, address and key.

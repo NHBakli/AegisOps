@@ -1,0 +1,14 @@
+---
+# ansible-core 2.20 exposes ansible_run_tags as a tuple, older releases as a
+# list: normalise with "| list" so the comparison works on both.
+- name: Require at least one explicitly selected verification section
+  ansible.builtin.assert:
+    that:
+      - ansible_run_tags | list == ['all']
+      - ansible_skip_tags | length == 0
+      - >-
+        verify_users | bool or verify_ssh | bool or verify_firewall | bool
+        or verify_fail2ban | bool or verify_updates | bool
+        or verify_monitoring | bool or verify_wireguard | bool
+    fail_msg: Select at least one verify_* section and run without --tags or --skip-tags.
+  tags: always

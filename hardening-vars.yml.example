@@ -53,11 +53,43 @@ updates_hardening_reboot_time: "03:00"
 updates_hardening_reboot_approved_host: ""
 updates_hardening_recovery_confirmed: false
 
+# VPN (playbooks/vpn.yml). Opens 51820/udp in UFW: confirm it explicitly.
+# Generate each device key with: scripts/aegisops-wg-peer new <name>
+wireguard_approved_host: ""
+wireguard_admin_user: aegisadmin
+wireguard_ufw_rule_confirmed: false
+wireguard_port: 51820
+wireguard_network: 10.66.66.0/24
+wireguard_server_address: 10.66.66.1
+wireguard_peers: []
+#  - name: pc-linux
+#    address: 10.66.66.2
+#    public_key: "<sortie de scripts/aegisops-wg-peer new pc-linux>"
+
+# Monitoring (playbooks/monitoring.yml). Prometheus and node_exporter stay on
+# 127.0.0.1. Grafana is reached through an SSH tunnel (ssh_tunnel) or the VPN
+# (vpn). The Grafana password belongs in a separate Vault file passed with
+# -e @monitoring-vault.yml, never in this file.
+monitoring_approved_host: ""
+monitoring_grafana_access: ssh_tunnel
+monitoring_admin_user: aegisadmin
+monitoring_prometheus_retention_time: 15d
+monitoring_prometheus_retention_size: 1GB
+monitoring_prometheus_memory_max_mb: 512
+monitoring_grafana_memory_max_mb: 512
+monitoring_node_exporter_memory_max_mb: 64
+monitoring_memory_reserve_mb: 1024
+
 verify_users: false
 verify_ssh: false
 verify_firewall: false
 verify_fail2ban: false
 verify_updates: false
+verify_monitoring: false
+verify_wireguard: false
+# UFW rules managed by another tool, accepted by their exact comment after
+# review. Any other undeclared rule still fails verify_firewall.
+verify_firewall_accepted_external_comments: []
 verify_ssh_source_ip: ""
 verify_ssh_source_host: ""
 verify_ssh_admin_user: aegisadmin

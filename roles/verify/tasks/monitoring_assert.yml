@@ -1,0 +1,30 @@
+---
+- name: Assert monitoring services, exposure and collector freshness
+  ansible.builtin.assert:
+    that:
+      - verify_monitoring_services.stdout_lines == ['active', 'active', 'active', 'active']
+      - verify_monitoring_exposed | length == 0
+      - "'0.0.0.0/0' in verify_monitoring_ip_deny.stdout"
+      - verify_monitoring_bound | length >= 3
+      - verify_monitoring_metrics.stat.exists | default(false)
+      - (verify_monitoring_now | float) - (verify_monitoring_metrics.stat.mtime | default(0) | float) < 600
+    fail_msg: >-
+      Monitoring must run Prometheus, node_exporter, Grafana (with
+      IPAddressDeny=any) and the collector timer, listen only on their expected addresses (unexpected: {{ verify_monitoring_exposed }})
+      and refresh security metrics within 10 minutes.
+  vars:
+    verify_monitoring_now: "{{ verify_monitoring_clock.stdout | default(0) }}"
+    verify_monitoring_pattern: ":(3000|9090|9100)$"
+    verify_monitoring_grafana_address: >-
+      {{ wireguard_server_address
+         if (monitoring_grafana_access | default('ssh_tunnel')) == 'vpn'
+         else '127.0.0.1' }}
+    verify_monitoring_allowed:
+      - "127.0.0.1:9090"
+      - "127.0.0.1:9100"
+      - "{{ verify_monitoring_grafana_address }}:3000"
+    verify_monitoring_bound: >-
+      {{ verify_monitoring_listeners.stdout_lines | map('split') | map(attribute=3)
+         | select('search', verify_monitoring_pattern) | list }}
+    verify_monitoring_exposed: >-
+      {{ verify_monitoring_bound | reject('in', verify_monitoring_allowed) | list }}

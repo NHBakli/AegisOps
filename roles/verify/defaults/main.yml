@@ -5,6 +5,13 @@ verify_ssh: false
 verify_firewall: false
 verify_fail2ban: false
 verify_updates: false
+verify_monitoring: false
+verify_wireguard: false
+
+# UFW rules managed by another tool, accepted by exact comment after review,
+# e.g. ["Project OS K3s", "Project OS ingress"]. Any other undeclared rule
+# still fails verify_firewall.
+verify_firewall_accepted_external_comments: []
 
 # An address and hostname representing the administrator's SSH source.
 # These are required only for contextual SSH verification.

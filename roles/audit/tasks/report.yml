@@ -13,10 +13,10 @@
   vars:
     all_security_checks: >-
       {{
-        (ssh_security_checks.values() | list)
-        + (user_security_checks.values() | list)
-        + (firewall_security_checks.values() | list)
-        + (updates_security_checks.values() | list)
+        (audit_ssh_security_checks.values() | list)
+        + (audit_user_security_checks.values() | list)
+        + (audit_firewall_security_checks.values() | list)
+        + (audit_updates_security_checks.values() | list)
       }}
     summary_counts: >-
       {{ {
@@ -47,7 +47,7 @@
         architecture: "{{ ansible_facts['architecture'] }}"
 
       checks:
-        ssh: "{{ ssh_security_checks }}"
-        users: "{{ user_security_checks }}"
-        firewall: "{{ firewall_security_checks }}"
-        updates: "{{ updates_security_checks }}"
+        ssh: "{{ audit_ssh_security_checks }}"
+        users: "{{ audit_user_security_checks }}"
+        firewall: "{{ audit_firewall_security_checks }}"
+        updates: "{{ audit_updates_security_checks }}"

@@ -1,0 +1,27 @@
+---
+- name: Render monitoring templates locally
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Load role defaults and fixed variables
+      ansible.builtin.include_vars: "{{ item }}"
+      loop:
+        - ../../roles/monitoring/defaults/main.yml
+        - ../../roles/monitoring/vars/main.yml
+
+    - name: Render every role template
+      ansible.builtin.template:
+        src: "../../roles/monitoring/templates/{{ item }}.j2"
+        dest: "{{ output_dir }}/{{ item }}"
+        mode: "0600"
+      loop:
+        - prometheus.conf
+        - prometheus-node-exporter.conf
+        - grafana-server.conf
+        - grafana.env
+        - prometheus.yml
+        - grafana-datasource.yml
+        - grafana-dashboards.yml
+        - aegisops-security-exporter.service
+        - aegisops-security-exporter.timer

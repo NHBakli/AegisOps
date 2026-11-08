@@ -1,0 +1,165 @@
+---
+- name: Wait for the monitoring listeners
+  ansible.builtin.wait_for:
+    host: "{{ item.split(':')[0] }}"
+    port: "{{ item.split(':')[1] | int }}"
+    timeout: 60
+  loop: "{{ monitoring_allowed_listeners }}"
+
+- name: Read TCP listeners
+  ansible.builtin.command:
+    argv: [ss, -Htln]
+  register: monitoring_listeners
+  changed_when: false
+
+- name: Require each monitoring port on its expected address only
+  ansible.builtin.assert:
+    that:
+      - monitoring_exposed | length == 0
+    fail_msg: "Monitoring ports listening on unexpected addresses: {{ monitoring_exposed }}"
+  vars:
+    monitoring_port_pattern: ":({{ monitoring_ports.values() | join('|') }})$"
+    monitoring_exposed: >-
+      {{ monitoring_listeners.stdout_lines | map('split') | map(attribute=3)
+         | select('search', monitoring_port_pattern)
+         | reject('in', monitoring_allowed_listeners)
+         | list }}
+
+- name: Read the Grafana per-service network filter
+  ansible.builtin.command:
+    argv: [systemctl, show, --property=IPAddressDeny, --value, grafana-server.service]
+  register: monitoring_grafana_ip_deny
+  changed_when: false
+
+- name: Require Grafana to refuse every source outside its allow list
+  ansible.builtin.assert:
+    that:
+      - "'0.0.0.0/0' in monitoring_grafana_ip_deny.stdout"
+      - "'::/0' in monitoring_grafana_ip_deny.stdout"
+    fail_msg: grafana-server.service is missing IPAddressDeny=any.
+
+- name: Wait for Prometheus readiness
+  ansible.builtin.uri:
+    url: "http://{{ monitoring_listen_address }}:{{ monitoring_ports.prometheus }}/-/ready"
+  register: monitoring_prometheus_ready
+  until: monitoring_prometheus_ready.status == 200
+  retries: 12
+  delay: 5
+
+- name: Wait for Grafana health
+  ansible.builtin.uri:
+    url: "http://{{ monitoring_grafana_domain }}:{{ monitoring_ports.grafana }}/api/health"
+  register: monitoring_grafana_health
+  until: monitoring_grafana_health.status == 200
+  retries: 12
+  delay: 5
+
+- name: Check the declared Grafana administrator password
+  ansible.builtin.uri:
+    url: "http://{{ monitoring_grafana_domain }}:{{ monitoring_ports.grafana }}/login"
+    method: POST
+    body_format: json
+    body:
+      user: "{{ monitoring_grafana_admin_user }}"
+      password: "{{ monitoring_grafana_admin_password }}"
+    status_code: [200, 401]
+  register: monitoring_grafana_login
+  no_log: true
+
+# GF_SECURITY_ADMIN_PASSWORD applies only when the database is created; this
+# keeps the declared secret authoritative afterwards. The secret uses stdin.
+- name: Reset the Grafana administrator password to the declared secret
+  ansible.builtin.command:
+    argv:
+      - grafana
+      - cli
+      - --homepath
+      - /usr/share/grafana
+      - --config
+      - /etc/grafana/grafana.ini
+      - --configOverrides
+      - cfg:default.paths.data=/var/lib/grafana
+      - admin
+      - reset-admin-password
+      - --password-from-stdin
+    stdin: "{{ monitoring_grafana_admin_password }}"
+  become: true
+  become_user: grafana
+  when: monitoring_grafana_login.status == 401
+  changed_when: true
+  no_log: true
+
+- name: Require the declared Grafana administrator password to work
+  ansible.builtin.uri:
+    url: "http://{{ monitoring_grafana_domain }}:{{ monitoring_ports.grafana }}/login"
+    method: POST
+    body_format: json
+    body:
+      user: "{{ monitoring_grafana_admin_user }}"
+      password: "{{ monitoring_grafana_admin_password }}"
+  when: monitoring_grafana_login.status == 401
+  no_log: true
+
+- name: Run the security collector once
+  ansible.builtin.command:
+    argv: [systemctl, start, aegisops-security-exporter.service]
+  changed_when: false
+
+- name: Read the security collector result
+  ansible.builtin.command:
+    argv: [systemctl, show, --property=Result, --value, aegisops-security-exporter.service]
+  register: monitoring_collector_result
+  changed_when: false
+
+- name: Read the security metrics file
+  ansible.builtin.slurp:
+    src: "{{ monitoring_textfile_directory }}/aegisops.prom"
+  register: monitoring_collector_file
+
+- name: Require a successful security collection
+  ansible.builtin.assert:
+    that:
+      - monitoring_collector_result.stdout == 'success'
+      - "'aegisops_exporter_last_run_timestamp_seconds' in monitoring_collector_text"
+      - monitoring_collector_text is search('aegisops_exporter_section_success\\{section="fail2ban"\\} 1')
+      - monitoring_collector_text is search('aegisops_exporter_section_success\\{section="ufw"\\} 1')
+      - monitoring_collector_text is search('aegisops_exporter_section_success\\{section="ssh"\\} 1')
+    fail_msg: >-
+      The AegisOps security collector failed or could not read Fail2ban, UFW or
+      SSH. Run: sudo systemctl start aegisops-security-exporter.service and read
+      journalctl -u aegisops-security-exporter.service.
+  vars:
+    monitoring_collector_text: "{{ monitoring_collector_file.content | b64decode }}"
+
+- name: Wait until every local scrape target is healthy
+  ansible.builtin.uri:
+    url: "http://{{ monitoring_listen_address }}:{{ monitoring_ports.prometheus }}/api/v1/targets?state=active"
+    return_content: true
+  register: monitoring_targets
+  until: >-
+    monitoring_targets.json.data.activeTargets | length == 3
+    and monitoring_targets.json.data.activeTargets
+    | rejectattr('health', 'equalto', 'up') | list | length == 0
+  retries: 12
+  delay: 10
+
+- name: Read section results and the memory actually used
+  ansible.builtin.command:
+    argv:
+      - systemctl
+      - show
+      - --property=Id,MemoryCurrent,MemoryMax
+      - prometheus.service
+      - prometheus-node-exporter.service
+      - grafana-server.service
+  register: monitoring_memory
+  changed_when: false
+
+- name: Report collector sections and memory footprint
+  ansible.builtin.debug:
+    msg:
+      sections: >-
+        {{ monitoring_collector_file.content | b64decode
+           | regex_findall('aegisops_exporter_section_success\{section="(\w+)"\} (\d)') }}
+      memory: "{{ monitoring_memory.stdout_lines | reject('equalto', '') | list }}"
+      memory_cap_enforced: "{{ 'MemoryMax=infinity' not in monitoring_memory.stdout_lines }}"

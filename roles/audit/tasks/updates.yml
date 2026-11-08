@@ -6,7 +6,7 @@
       - -W
       - -f=${Status}
       - unattended-upgrades
-  register: unattended_package
+  register: audit_unattended_package
   changed_when: false
   failed_when: false
 
@@ -15,7 +15,7 @@
     argv:
       - apt-config
       - dump
-  register: apt_configuration
+  register: audit_apt_configuration
   changed_when: false
   failed_when: false
 
@@ -25,20 +25,20 @@
       - systemctl
       - is-enabled
       - apt-daily-upgrade.timer
-  register: apt_upgrade_timer
+  register: audit_apt_upgrade_timer
   changed_when: false
   failed_when: false
 
 - name: Evaluate automatic updates security
   ansible.builtin.set_fact:
-    updates_security_checks:
+    audit_updates_security_checks:
       package_installed:
         status: >-
           {{
             'PASS'
             if (
-              unattended_package.rc == 0
-              and 'install ok installed' in unattended_package.stdout
+              audit_unattended_package.rc == 0
+              and 'install ok installed' in audit_unattended_package.stdout
             )
             else 'WARN'
           }}
@@ -47,10 +47,10 @@
       periodic_updates:
         status: >-
           {{
-            'REVIEW' if apt_configuration.rc != 0
+            'REVIEW' if audit_apt_configuration.rc != 0
             else 'PASS'
             if (
-              apt_configuration.stdout_lines
+              audit_apt_configuration.stdout_lines
               | select(
                   'match',
                   '^APT::Periodic::Unattended-Upgrade\s+"1";$'
@@ -67,8 +67,8 @@
           {{
             'PASS'
             if (
-              apt_upgrade_timer.rc == 0
-              and (apt_upgrade_timer.stdout | default('') | trim)
+              audit_apt_upgrade_timer.rc == 0
+              and (audit_apt_upgrade_timer.stdout | default('') | trim)
                   == 'enabled'
             )
             else 'WARN'
@@ -78,10 +78,10 @@
 - name: Display automatic updates audit
   ansible.builtin.debug:
     msg:
-      - "Package installed: {{ unattended_package.rc == 0 and 'install ok installed' in unattended_package.stdout }}"
-      - "Upgrade timer: {{ apt_upgrade_timer.stdout | default('unknown', true) }}"
-      - "APT periodic settings: {{ apt_configuration.stdout_lines | select('match', '^APT::Periodic::') | list }}"
+      - "Package installed: {{ audit_unattended_package.rc == 0 and 'install ok installed' in audit_unattended_package.stdout }}"
+      - "Upgrade timer: {{ audit_apt_upgrade_timer.stdout | default('unknown', true) }}"
+      - "APT periodic settings: {{ audit_apt_configuration.stdout_lines | select('match', '^APT::Periodic::') | list }}"
 
 - name: Display automatic updates assessment
   ansible.builtin.debug:
-    var: updates_security_checks
+    var: audit_updates_security_checks

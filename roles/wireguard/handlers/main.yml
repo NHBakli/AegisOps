@@ -1,0 +1,6 @@
+---
+# A restart briefly drops VPN sessions; Ansible itself connects over SSH.
+- name: Restart WireGuard
+  ansible.builtin.systemd_service:
+    name: wg-quick@wg0.service
+    state: restarted

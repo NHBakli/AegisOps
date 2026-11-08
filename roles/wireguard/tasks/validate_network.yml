@@ -1,0 +1,42 @@
+---
+- name: Require a consistent VPN network that overlaps no existing route
+  ansible.builtin.command:
+    argv:
+      - /usr/bin/python3
+      - -I
+      - -c
+      - |
+        import ipaddress, json, sys
+        network = ipaddress.ip_network(sys.argv[1])
+        server = ipaddress.ip_address(sys.argv[2])
+        peers = [ipaddress.ip_address(a) for a in json.loads(sys.argv[3])]
+        interface = sys.argv[4]
+        reserved = [ipaddress.ip_network(n) for n in json.loads(sys.argv[6])]
+        if not network.is_private:
+            sys.exit(f"{network} is not a private network")
+        for address in [server, *peers]:
+            if address not in network or address in (network.network_address, network.broadcast_address):
+                sys.exit(f"{address} is not a usable host of {network}")
+        if server in peers:
+            sys.exit("a peer reuses the server address")
+        for candidate in reserved:
+            if candidate.overlaps(network):
+                sys.exit(f"{network} overlaps the reserved network {candidate}")
+        for line in sys.argv[5].splitlines():
+            fields = line.split()
+            device = fields[fields.index("dev") + 1] if "dev" in fields[:-1] else ""
+            if not fields or device == interface or fields[0] == "default":
+                continue
+            try:
+                route = ipaddress.ip_network(fields[0], strict=False)
+            except ValueError:
+                continue
+            if route.overlaps(network):
+                sys.exit(f"{network} overlaps the existing route {route}")
+      - "{{ wireguard_network }}"
+      - "{{ wireguard_server_address }}"
+      - "{{ wireguard_peers | map(attribute='address') | list | to_json }}"
+      - "{{ wireguard_interface }}"
+      - "{{ wireguard_routes.stdout }}"
+      - "{{ wireguard_reserved_networks | to_json }}"
+  changed_when: false

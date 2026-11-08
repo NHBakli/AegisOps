@@ -28,6 +28,8 @@ class VerifyTest(unittest.TestCase):
                 "verify_firewall": False,
                 "verify_fail2ban": False,
                 "verify_updates": False,
+                "verify_monitoring": False,
+                "verify_wireguard": False,
             }
             test_variables.update(variables)
             return subprocess.run(
@@ -45,6 +47,22 @@ class VerifyTest(unittest.TestCase):
         self.assertEqual(result.returncode == 0, expected_success,
                          result.stdout + result.stderr)
         self.assertIn("changed=0", result.stdout)
+
+    def test_selection_guard_accepts_an_untagged_run_with_a_section(self):
+        # Regression: ansible-core 2.20 turned ansible_run_tags into a tuple.
+        for section in ("verify_users", "verify_monitoring", "verify_wireguard"):
+            with self.subTest(section=section):
+                result = self.run_playbook("tests/verify/selection.yml", {section: True})
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_selection_guard_rejects_no_section_or_tagged_runs(self):
+        self.assertNotEqual(self.run_playbook("tests/verify/selection.yml", {}).returncode, 0)
+        tagged = self.run_playbook("tests/verify/selection.yml", {"verify_users": True},
+                                   ("--tags", "always"))
+        self.assertNotEqual(tagged.returncode, 0)
+        skipped = self.run_playbook("tests/verify/selection.yml", {"verify_users": True},
+                                    ("--skip-tags", "ssh"))
+        self.assertNotEqual(skipped.returncode, 0)
 
     def test_platform_guard_accepts_supported_ubuntu_releases_only(self):
         for version, expected_success in (("22.04", True), ("24.04", True),
@@ -84,6 +102,30 @@ class VerifyTest(unittest.TestCase):
         self.assert_fixture({**base, "fixture_root_ssh_lines":
                              [*root[:-1], "kbdinteractiveauthentication yes"]}, False)
 
+    def test_firewall_accepts_only_reviewed_external_rules(self):
+        base = ("Status: active\nDefault: deny (incoming), allow (outgoing), deny (routed)\n"
+                "22/tcp  ALLOW IN  Anywhere  # AegisOps SSH access\n")
+        external = ("Anywhere  ALLOW IN  10.42.0.0/16  # Project OS K3s\n"
+                    "80/tcp  ALLOW IN  Anywhere  # Project OS ingress\n"
+                    "443/tcp (v6)  ALLOW IN  Anywhere (v6)  # Project OS ingress\n")
+        accepted = ["Project OS K3s", "Project OS ingress"]
+        cases = [
+            ("external rules not reviewed", base + external, [], False),
+            ("external rules reviewed", base + external, accepted, True),
+            ("partial review", base + external, ["Project OS K3s"], False),
+            ("unknown rule beside reviewed ones",
+             base + external + "3306/tcp  ALLOW IN  Anywhere  # database\n", accepted, False),
+            ("comment must match exactly",
+             base + "8080/tcp  ALLOW IN  Anywhere  # Project OS ingress extra\n", accepted, False),
+            ("AegisOps rules cannot be exempted", base + external, accepted + ["AegisOps SSH access"], False),
+            ("unsafe comment characters", base, ["Project OS|.*"], False),
+        ]
+        for name, output, comments, expected in cases:
+            with self.subTest(case=name):
+                self.assert_fixture({"fixture_kind": "firewall", "fixture_ufw_output": output,
+                                     "verify_firewall_accepted_external_comments": comments},
+                                    expected)
+
     def test_users_requires_managed_sudoers_policy(self):
         base = {"fixture_kind": "users"}
         self.assert_fixture({**base, "fixture_sudoers":
@@ -97,6 +139,12 @@ class VerifyTest(unittest.TestCase):
                              base + "22/tcp  ALLOW IN  Anywhere\n"}, True)
         self.assert_fixture({"fixture_kind": "firewall", "fixture_ufw_output":
                              base + "80/tcp  ALLOW IN  Anywhere\n"}, False)
+        # VPN rules are checked by verify_wireguard and verify_monitoring.
+        self.assert_fixture({"fixture_kind": "firewall", "fixture_ufw_output":
+                             base + "22/tcp  ALLOW IN  Anywhere\n"
+                             + "51820/udp  ALLOW IN  Anywhere  # AegisOps WireGuard\n"
+                             + "10.66.66.1 3000/tcp on wg0  ALLOW IN  Anywhere"
+                             + "  # AegisOps Grafana via VPN\n"}, True)
         self.assert_fixture({"fixture_kind": "firewall", "fixture_ufw_output":
                              base + "22/tcp  ALLOW IN  Anywhere\n"
                              + "3306/tcp  ALLOW IN  Anywhere\n"}, False)

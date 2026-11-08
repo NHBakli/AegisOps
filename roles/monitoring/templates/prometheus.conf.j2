@@ -1,0 +1,12 @@
+# Managed by AegisOps. Loopback listener, bounded retention and memory.
+[Service]
+ExecStart=
+ExecStart=/usr/bin/prometheus \
+  --config.file=/etc/prometheus/prometheus.yml \
+  --storage.tsdb.path=/var/lib/prometheus/metrics2/ \
+  --storage.tsdb.retention.time={{ monitoring_prometheus_retention_time }} \
+  --storage.tsdb.retention.size={{ monitoring_prometheus_retention_size }} \
+  --web.listen-address={{ monitoring_listen_address }}:{{ monitoring_ports.prometheus }}
+Environment=GOMEMLIMIT={{ (monitoring_prometheus_memory_max_mb * 0.8) | int }}MiB
+MemoryMax={{ monitoring_prometheus_memory_max_mb }}M
+CPUQuota=50%

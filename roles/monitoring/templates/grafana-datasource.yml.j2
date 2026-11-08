@@ -1,0 +1,10 @@
+# Managed by AegisOps.
+apiVersion: 1
+datasources:
+  - name: Prometheus AegisOps
+    uid: aegisops-prometheus
+    type: prometheus
+    access: proxy
+    url: http://{{ monitoring_listen_address }}:{{ monitoring_ports.prometheus }}
+    isDefault: true
+    editable: false

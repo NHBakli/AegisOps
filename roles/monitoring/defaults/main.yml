@@ -1,0 +1,28 @@
+---
+# Deployment requires host-specific approval, like the hardening roles.
+monitoring_approved_host: ""
+monitoring_admin_user: ""
+
+# How the dashboard is reached: "ssh_tunnel" (Grafana on 127.0.0.1) or "vpn"
+# (Grafana on wireguard_server_address, deployed first by playbooks/vpn.yml).
+monitoring_grafana_access: ssh_tunnel
+
+# Secret: supply it from an Ansible Vault encrypted file, never in clear text.
+monitoring_grafana_admin_user: admin
+monitoring_grafana_admin_password: ""
+
+# Retention keeps the TSDB small; whichever limit is reached first applies.
+monitoring_prometheus_retention_time: 15d
+monitoring_prometheus_retention_size: 1GB
+monitoring_scrape_interval: 30s
+
+# Hard memory ceilings (systemd MemoryMax) and Go soft limits (GOMEMLIMIT).
+monitoring_prometheus_memory_max_mb: 512
+monitoring_grafana_memory_max_mb: 512
+monitoring_node_exporter_memory_max_mb: 64
+# Memory that must remain available after the ceilings above are reserved.
+monitoring_memory_reserve_mb: 1024
+
+# Collector cadence and the size cap of the published banned IP list.
+monitoring_collector_interval: 1min
+monitoring_collector_max_banned_ips: 500

@@ -1,0 +1,28 @@
+---
+# Deployment requires host-specific approval, like the hardening roles.
+wireguard_approved_host: ""
+wireguard_admin_user: ""
+# Explicit approval to add the "AegisOps WireGuard" UFW rule (51820/udp).
+wireguard_ufw_rule_confirmed: false
+
+# Address clients connect to, and the private VPN network. The network must not
+# overlap a route already present on the server (K3s uses 10.42/10.43).
+wireguard_endpoint: "{{ ansible_host }}"
+wireguard_port: 51820
+wireguard_network: 10.66.66.0/24
+wireguard_server_address: 10.66.66.1
+# Ranges the VPN must never overlap even without a route (K3s pods and
+# ClusterIP services exist partly only in iptables).
+wireguard_reserved_networks:
+  - 10.42.0.0/16
+  - 10.43.0.0/16
+
+# One entry per device. Keys are generated on the controller with
+# scripts/aegisops-wg-peer; private keys never reach the server.
+#   - name: pc-linux
+#     address: 10.66.66.2
+#     public_key: "base64 WireGuard public key"
+wireguard_peers: []
+
+# Where client private keys live and client configurations are written.
+wireguard_client_directory: "{{ lookup('ansible.builtin.env', 'HOME') }}/.config/aegisops/wireguard"

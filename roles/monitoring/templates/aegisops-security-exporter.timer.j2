@@ -1,0 +1,11 @@
+# Managed by AegisOps.
+[Unit]
+Description=Refresh AegisOps security metrics
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec={{ monitoring_collector_interval }}
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target

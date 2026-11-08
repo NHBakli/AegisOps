@@ -1,0 +1,12 @@
+---
+- name: Validate approval, network and peers before changes
+  ansible.builtin.import_tasks: preflight.yml
+
+- name: Install WireGuard and configure the wg0 server
+  ansible.builtin.import_tasks: configure.yml
+
+- name: Verify the tunnel, firewall rule and peers
+  ansible.builtin.import_tasks: verify.yml
+
+- name: Write client configurations on the controller
+  ansible.builtin.import_tasks: clients.yml

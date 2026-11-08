@@ -1,0 +1,19 @@
+---
+- name: Exercise monitoring guards without changing the host
+  hosts: my-vps
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_user: aegisadmin
+    ansible_facts:
+      distribution: Ubuntu
+      distribution_version: "{{ fixture_distribution_version | default('24.04') }}"
+      memory_mb:
+        nocache:
+          free: "{{ fixture_free_mb | default(8000) }}"
+  tasks:
+    - name: Load role defaults
+      ansible.builtin.include_vars: ../../roles/monitoring/defaults/main.yml
+
+    - name: Run the real monitoring preflight
+      ansible.builtin.import_tasks: ../../roles/monitoring/tasks/preflight.yml

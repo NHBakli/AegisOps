@@ -1,0 +1,159 @@
+---
+# Drop-ins exist before the packages so the very first start already listens
+# on loopback with memory ceilings; Debian packages start services on install.
+- name: Create systemd drop-in directories
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ item }}.service.d"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - prometheus
+    - prometheus-node-exporter
+    - grafana-server
+
+- name: Create the AegisOps configuration directory
+  ansible.builtin.file:
+    path: /etc/aegisops
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the Grafana environment with its administrator secret
+  ansible.builtin.template:
+    src: grafana.env.j2
+    dest: "{{ monitoring_grafana_env_file }}"
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+  notify: Restart grafana-server
+
+- name: Install the Prometheus loopback and memory-limit drop-in
+  ansible.builtin.template:
+    src: prometheus.conf.j2
+    dest: /etc/systemd/system/prometheus.service.d/aegisops.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart prometheus
+
+- name: Install the node_exporter loopback and memory-limit drop-in
+  ansible.builtin.template:
+    src: prometheus-node-exporter.conf.j2
+    dest: /etc/systemd/system/prometheus-node-exporter.service.d/aegisops.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart prometheus-node-exporter
+
+- name: Install the Grafana loopback and memory-limit drop-in
+  ansible.builtin.template:
+    src: grafana-server.conf.j2
+    dest: /etc/systemd/system/grafana-server.service.d/aegisops.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart grafana-server
+
+- name: Reload systemd before packages start their services
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
+- name: Install the tools needed to check the Grafana key
+  ansible.builtin.apt:
+    name: [gpg, ca-certificates]
+    state: present
+    install_recommends: false
+    cache_valid_time: 3600
+
+- name: Create the APT keyring directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Install the vendored Grafana repository signing key
+  ansible.builtin.copy:
+    src: grafana-apt.asc
+    dest: "{{ monitoring_grafana_keyring }}"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Read the installed Grafana key fingerprint
+  ansible.builtin.command:
+    argv:
+      - gpg
+      - --batch
+      - --show-keys
+      - --with-colons
+      - "{{ monitoring_grafana_keyring }}"
+  register: monitoring_grafana_key
+  changed_when: false
+
+- name: Require the expected Grafana signing key
+  ansible.builtin.assert:
+    that:
+      - >-
+        ('fpr:::::::::' ~ monitoring_grafana_key_fingerprint ~ ':')
+        in monitoring_grafana_key.stdout_lines
+    fail_msg: The Grafana repository key does not match the pinned fingerprint.
+
+- name: Restrict the Grafana repository to the grafana package only
+  ansible.builtin.copy:
+    dest: /etc/apt/preferences.d/aegisops-grafana
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by AegisOps: the third-party origin may not replace system packages.
+      Package: *
+      Pin: origin "apt.grafana.com"
+      Pin-Priority: 1
+
+      Package: grafana
+      Pin: origin "apt.grafana.com"
+      Pin-Priority: 500
+
+- name: Add the signed Grafana repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/grafana.list
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by AegisOps.
+      deb [signed-by={{ monitoring_grafana_keyring }}] https://apt.grafana.com stable main
+  register: monitoring_grafana_repo
+
+- name: Check whether APT already knows the grafana package
+  ansible.builtin.command:
+    argv: [apt-cache, policy, grafana]
+  register: monitoring_grafana_policy
+  changed_when: false
+
+# cache_valid_time would skip this refresh when the cache is recent, even
+# though the new repository has never been indexed.
+- name: Refresh the APT index after adding the Grafana repository
+  ansible.builtin.apt:
+    update_cache: true
+  when: >-
+    monitoring_grafana_repo is changed
+    or monitoring_grafana_policy.stdout is not search('Candidate: [0-9]')
+
+- name: Install monitoring packages without recommendations
+  ansible.builtin.apt:
+    name: "{{ monitoring_packages }}"
+    state: present
+    install_recommends: false

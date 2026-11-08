@@ -4,9 +4,9 @@
     argv:
       - ss
       - -tuln
-  register: listening_sockets
+  register: audit_listening_sockets
   changed_when: false
 
 - name: Display listening network sockets
   ansible.builtin.debug:
-    var: listening_sockets.stdout_lines
+    var: audit_listening_sockets.stdout_lines
